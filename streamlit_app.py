@@ -67,16 +67,36 @@ def reset_to_search() -> None:
     st.session_state.prefilled_keys = set()
 
 
-def goto_questionnaire(sf_data: dict | None) -> None:
+def remaining_questions(answers: dict) -> list[dict]:
+    """Visible questions (per branching) that the user still needs to answer."""
+    return [q for q in visible_questions(answers) if not answers.get(q["id"])]
+
+
+def goto_next_after_search(sf_data: dict | None) -> None:
+    """After SF lookup (or skip), pick the right next screen:
+    - SF prefilled some answers → review screen so the AE can confirm/edit them
+    - Nothing prefilled (skip path) → straight into the questionnaire
+    """
     st.session_state.sf_data = sf_data
     if sf_data and sf_data.get("prefill"):
         st.session_state.answers = dict(sf_data["prefill"])
         st.session_state.prefilled_keys = set(sf_data["prefill"].keys())
+        st.session_state.screen = "review"
     else:
         st.session_state.answers = {}
         st.session_state.prefilled_keys = set()
+        st.session_state.screen = "questionnaire"
     st.session_state.step = 0
-    st.session_state.screen = "questionnaire"
+
+
+def advance_from_review() -> None:
+    """Continue from the review screen: if any questions remain (or branching
+    just opened new ones), go to the questionnaire. Otherwise jump to result."""
+    st.session_state.step = 0
+    if remaining_questions(st.session_state.answers):
+        st.session_state.screen = "questionnaire"
+    else:
+        st.session_state.screen = "result"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -102,7 +122,7 @@ def render_search() -> None:
         skip_clicked = st.button("Skip — answer manually", use_container_width=True)
 
     if skip_clicked:
-        goto_questionnaire(None)
+        goto_next_after_search(None)
         st.rerun()
 
     if scope_clicked and query.strip():
@@ -127,7 +147,7 @@ def render_search() -> None:
                                                    "ECONOMIC_BUYER", "CLOSE_DATE", "TYPE", "STAGE")}
                         dd_count = sf.fetch_dd_product_count(account["ACCOUNT_ID"])
                         full = {"account": account, "opp": opp, "dd_product_count": dd_count}
-                        goto_questionnaire(sf.to_sf_data(full))
+                        goto_next_after_search(sf.to_sf_data(full))
                         st.rerun()
                 else:
                     rows = sf.search_accounts(query)
@@ -136,7 +156,7 @@ def render_search() -> None:
                         st.session_state.search_results = []
                     elif len(rows) == 1:
                         full = sf.fetch_full(rows[0])
-                        goto_questionnaire(sf.to_sf_data(full))
+                        goto_next_after_search(sf.to_sf_data(full))
                         st.rerun()
                     else:
                         st.session_state.search_results = rows
@@ -164,8 +184,74 @@ def render_search() -> None:
             picked = st.session_state.search_results[idx]
             with st.spinner("Loading opportunity + contracted products…"):
                 full = sf.fetch_full(picked)
-                goto_questionnaire(sf.to_sf_data(full))
+                goto_next_after_search(sf.to_sf_data(full))
                 st.rerun()
+
+
+# ──────────────────────────────────────────────────────────────────
+# Review screen — confirm/edit answers we already have (from SF prefill or
+# from a prior pass through the questionnaire)
+# ──────────────────────────────────────────────────────────────────
+
+def render_review() -> None:
+    sf_data = st.session_state.sf_data
+    answers = st.session_state.answers
+
+    st.title("Review what we already know")
+    if sf_data:
+        sub = f"**{sf_data.get('accountName') or '?'}**"
+        if sf_data.get("oppName"):
+            sub += f" · {sf_data['oppName']}"
+        st.markdown(sub)
+    st.caption("These values came from Salesforce. Edit any that look wrong, then continue.")
+
+    # Only show questions whose answer is already set AND are visible per branching.
+    # The radio for each lets the AE override before the rest of the questionnaire runs.
+    visible_set = {q["id"] for q in visible_questions(answers)}
+    answered_visible = [
+        q for q in visible_questions(answers)
+        if q["id"] in visible_set and answers.get(q["id"])
+    ]
+
+    if not answered_visible:
+        # Defensive: shouldn't happen because we only land here when prefill is non-empty.
+        st.info("Nothing to review yet — straight to the questions.")
+        if st.button("Continue", type="primary"):
+            advance_from_review()
+            st.rerun()
+        return
+
+    for q in answered_visible:
+        opts = q["opts"]
+        option_values = [o["v"] for o in opts]
+        option_labels = [o["l"] for o in opts]
+        current = answers.get(q["id"])
+        default_idx = option_values.index(current) if current in option_values else 0
+
+        prefix = "⚡ " if q["id"] in st.session_state.prefilled_keys else ""
+        picked_label = st.radio(
+            f"{prefix}{q['q']}",
+            option_labels,
+            index=default_idx,
+            key=f"review_radio_{q['id']}",
+        )
+        if picked_label is not None:
+            picked_v = option_values[option_labels.index(picked_label)]
+            if answers.get(q["id"]) != picked_v:
+                answers[q["id"]] = picked_v
+
+    st.markdown("---")
+    col_a, col_b = st.columns([1, 1])
+    with col_a:
+        if st.button("← Search again", use_container_width=True):
+            reset_to_search()
+            st.rerun()
+    with col_b:
+        remaining_n = len(remaining_questions(answers))
+        cta = f"Answer the remaining {remaining_n} →" if remaining_n else "See recommendation →"
+        if st.button(cta, type="primary", use_container_width=True):
+            advance_from_review()
+            st.rerun()
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -173,12 +259,16 @@ def render_search() -> None:
 # ──────────────────────────────────────────────────────────────────
 
 def render_questionnaire() -> None:
-    vis = visible_questions(st.session_state.answers)
-    total = len(vis)
+    # Only walk through questions that don't already have an answer (prefilled
+    # ones live in the review screen). Re-evaluated each rerun so branching
+    # changes (e.g. ddStatus=live makes ddQuality visible) are picked up.
+    rem = remaining_questions(st.session_state.answers)
+    total = len(rem)
     step = st.session_state.step
 
-    # If branching reduced the list and we're past the end, jump to result.
-    if step >= total:
+    # No questions left → result. Happens if every visible question was
+    # prefilled, or if the AE just answered the last one.
+    if total == 0 or step >= total:
         st.session_state.screen = "result"
         st.rerun()
 
@@ -187,11 +277,14 @@ def render_questionnaire() -> None:
         pre_count = len(st.session_state.prefilled_keys)
         st.info(f"⚡ **{sf_data.get('accountName') or '?'}**"
                 + (f" — {sf_data.get('oppName')}" if sf_data.get('oppName') else "")
-                + f"   ·   {pre_count} fields pre-filled from Snowflake")
+                + f"   ·   {pre_count} fields from Snowflake (review to edit)")
+        if st.button("← Edit Salesforce answers", use_container_width=False):
+            st.session_state.screen = "review"
+            st.rerun()
 
     st.progress((step) / total, text=f"Question {step + 1} of {total}")
 
-    q = vis[step]
+    q = rem[step]
     st.subheader(q["q"])
 
     if q.get("sfField"):
@@ -232,10 +325,13 @@ def render_questionnaire() -> None:
             st.session_state.step -= 1
             st.rerun()
     with nav_next:
-        next_label = "See recommendation →" if step == total - 1 else "Next →"
+        # Determine "last question" against the freshly-computed remaining set
+        # so branching opening new questions doesn't get misdetected as done.
+        is_last = step == len(remaining_questions(st.session_state.answers)) - 1
+        next_label = "See recommendation →" if is_last else "Next →"
         if st.button(next_label, type="primary", disabled=(not st.session_state.answers.get(q["id"])), use_container_width=True):
             st.session_state.step += 1
-            if st.session_state.step >= len(visible_questions(st.session_state.answers)):
+            if st.session_state.step >= len(remaining_questions(st.session_state.answers)):
                 st.session_state.screen = "result"
             st.rerun()
 
@@ -306,8 +402,11 @@ def render_result() -> None:
     col_a, col_b = st.columns(2)
     with col_a:
         if st.button("← Edit answers"):
-            st.session_state.screen = "questionnaire"
-            st.session_state.step = max(0, len(visible_questions(answers)) - 1)
+            # Send the AE back to the review screen so they can edit anything
+            # (prefilled OR previously-manual answers — they're all in `answers`
+            # now and the review screen renders any answered+visible question).
+            st.session_state.screen = "review"
+            st.session_state.step = 0
             st.rerun()
     with col_b:
         if st.button("Start over", type="primary"):
@@ -322,6 +421,8 @@ def render_result() -> None:
 screen = st.session_state.screen
 if screen == "search":
     render_search()
+elif screen == "review":
+    render_review()
 elif screen == "questionnaire":
     render_questionnaire()
 elif screen == "result":
