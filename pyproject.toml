@@ -1,0 +1,19 @@
+[project]
+name = "is-scoping-tool"
+version = "0.1.0"
+description = "AE-facing scoping tool for Datadog Implementation Services engagements"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.40",
+    "snowflake-connector-python>=3.12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
