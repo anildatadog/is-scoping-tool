@@ -76,9 +76,28 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
         warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "AD_HOC_DEVELOPMENT_XSMALL_WAREHOUSE"),
         client_session_keep_alive=True,
     )
+    # Auth selection, in priority order:
+    #   1. SNOWFLAKE_PAT          -> Programmatic Access Token (Howler default)
+    #   2. SNOWFLAKE_PRIVATE_KEY  -> RSA key-pair
+    #   3. neither set            -> externalbrowser SSO (local dev only)
+    pat = os.environ.get("SNOWFLAKE_PAT")
+    if pat:
+        return snowflake.connector.connect(
+            **common,
+            token=pat,
+            authenticator="PROGRAMMATIC_ACCESS_TOKEN",
+        )
     private_key = _load_private_key()
     if private_key is not None:
         return snowflake.connector.connect(**common, private_key=private_key)
+    # externalbrowser only works when a real browser can be launched — fine for
+    # local dev, but in Howler (headless) it hangs forever. Fail loudly so the
+    # UI shows a real error instead of "Looking up in Salesforce..." forever.
+    if not os.environ.get("DISPLAY") and not os.environ.get("ALLOW_BROWSER_AUTH"):
+        raise RuntimeError(
+            "Snowflake auth is unconfigured: set SNOWFLAKE_PAT (preferred) or "
+            "SNOWFLAKE_PRIVATE_KEY. externalbrowser SSO cannot run headlessly."
+        )
     return snowflake.connector.connect(**common, authenticator="externalbrowser")
 
 

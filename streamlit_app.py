@@ -26,6 +26,27 @@ st.set_page_config(
     layout="centered",
 )
 
+# ──────────────────────────────────────────────────────────────────
+# Auth: Datadog Google Workspace only
+# ──────────────────────────────────────────────────────────────────
+# Streamlit's native auth (1.42+) reads OAuth config from .streamlit/secrets.toml;
+# the entrypoint writes that file from env vars at container start.
+# `hd=datadoghq.com` in client_kwargs filters at Google's auth screen, and we
+# also verify the email domain server-side as defense in depth.
+
+if not getattr(st, "user", None) or not st.user.is_logged_in:
+    st.title("🧭 IS Scoping Tool")
+    st.write("Sign in with your Datadog Google account to continue.")
+    st.button("Sign in with Google", type="primary", on_click=st.login, args=("google",))
+    st.stop()
+
+_email = (st.user.email or "").lower()
+if not _email.endswith("@datadoghq.com"):
+    st.error("Access restricted to Datadog employees.")
+    st.button("Sign out", on_click=st.logout)
+    st.stop()
+
+
 if "screen" not in st.session_state:
     st.session_state.screen = "search"
     st.session_state.sf_data = None
