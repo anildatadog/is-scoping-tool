@@ -32,16 +32,54 @@ _ENGINEER_KEYWORDS = ("engineer", "architect", "developer", "sre")
 # Connection
 # ──────────────────────────────────────────────────────────────────
 
+def _load_private_key() -> bytes | None:
+    """Load an RSA private key in DER format for Snowflake key-pair auth.
+
+    Looks for SNOWFLAKE_PRIVATE_KEY (PEM string, useful in Howler secrets)
+    or SNOWFLAKE_PRIVATE_KEY_PATH (path to a PEM file).
+    Returns DER-encoded bytes the Snowflake connector accepts, or None if no
+    key-pair material is configured.
+    """
+    pem_str = os.environ.get("SNOWFLAKE_PRIVATE_KEY")
+    pem_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+    if not pem_str and not pem_path:
+        return None
+
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import serialization
+
+    if pem_str:
+        pem_bytes = pem_str.encode("utf-8")
+    else:
+        with open(pem_path, "rb") as f:
+            pem_bytes = f.read()
+
+    passphrase = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
+    pk = serialization.load_pem_private_key(
+        pem_bytes,
+        password=passphrase.encode() if passphrase else None,
+        backend=default_backend(),
+    )
+    return pk.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
 @lru_cache(maxsize=1)
 def _connect() -> snowflake.connector.SnowflakeConnection:
-    return snowflake.connector.connect(
+    common = dict(
         account=os.environ.get("SNOWFLAKE_ACCOUNT", "sza96462.us-east-1"),
         user=os.environ["SNOWFLAKE_USER"],
-        authenticator="externalbrowser",
         database=os.environ.get("SNOWFLAKE_DATABASE", "REPORTING"),
         warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "AD_HOC_DEVELOPMENT_XSMALL_WAREHOUSE"),
         client_session_keep_alive=True,
     )
+    private_key = _load_private_key()
+    if private_key is not None:
+        return snowflake.connector.connect(**common, private_key=private_key)
+    return snowflake.connector.connect(**common, authenticator="externalbrowser")
 
 
 def _query(sql: str, params: dict | None = None) -> list[dict]:
