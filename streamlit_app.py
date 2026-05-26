@@ -384,7 +384,7 @@ def render_result() -> None:
         c3.metric("Build",    meth["phases"]["build"])
         c4.metric("Launch",   meth["phases"]["launch"])
 
-    flags = build_flags(answers, rec["key"])
+    flags = build_flags(answers, rec["key"], rec.get("sMax"))
     if flags:
         st.subheader("Risk flags")
         for f in flags:

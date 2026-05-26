@@ -38,7 +38,7 @@ def build(sf_data: dict | None, answers: dict, rec: dict) -> str:
     if answers.get("compliance") == "yes":
         ctx.append("regulated industry")
 
-    flags = [f for f in build_flags(answers, rec["key"]) if f["t"] != "ok"]
+    flags = [f for f in build_flags(answers, rec["key"], rec.get("sMax")) if f["t"] != "ok"]
     ns = build_next_steps(answers, rec["key"])
     rule = "━" * 40
 

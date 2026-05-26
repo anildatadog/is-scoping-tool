@@ -153,6 +153,17 @@ QUESTIONS: list[dict] = [
         ],
         "show": lambda a: True,
     },
+    {
+        "id": "securityScope",
+        "q": "Are Cloud Security products in scope?",
+        "opts": [
+            {"v": "yes", "l": "Yes — CSPM, CWPP, ASM, Cloud SIEM, or Sensitive Data Scanner",
+             "s": "Security products bring security ops + identity teams as stakeholders; agent and IAM patterns differ from observability"},
+            {"v": "no", "l": "No — observability/APM/logs only",
+             "s": "Standard engineering stakeholders"},
+        ],
+        "show": lambda a: True,
+    },
 ]
 
 
@@ -222,19 +233,43 @@ def recommend(a: dict) -> dict:
     if a.get("sponsor") == "none":
         return {"key": "political", "sMin": None, "sMax": None}
 
-    migration = a.get("replacingTool") == "yes" or a.get("ddQuality") == "rebuild"
-    remediation = a.get("ddQuality") == "messy"
+    # Issue #1: migration is strictly "replace an incumbent tool". A rebuild
+    # without replacement is heavy remediation, not migration.
+    migration = a.get("replacingTool") == "yes"
+    remediation = (
+        a.get("ddQuality") == "messy"
+        or (a.get("ddQuality") == "rebuild" and a.get("replacingTool") != "yes")
+    )
+
     single     = a.get("teamCount") == "single"
     large      = a.get("teamCount") == "large"
     enterprise = a.get("teamCount") == "enterprise"
     multi      = a.get("teamCount") == "multi"
 
-    pb = {"1-2": 0, "3-4": 8, "5-7": 18, "suite": 28}.get(a.get("productCount"), 0)
+    # Issue #3: single-team product bump is steeper. One team owning 8+
+    # products takes proportionally more time per product than a multi-team
+    # rollout — no parallelism, every product still needs full knowledge
+    # transfer to the same people.
+    pb_single = {"1-2": 0, "3-4": 12, "5-7": 28, "suite": 48}
+    pb_multi  = {"1-2": 0, "3-4": 8,  "5-7": 18, "suite": 28}
+    pb = (pb_single if single else pb_multi).get(a.get("productCount"), 0)
+
     cm = 1.38 if a.get("capability") == "limited" else 1.12 if a.get("capability") == "some" else 1.0
     mv = {"s": 0, "m": 12, "l": 28, "xl": 45, "unk": 10}.get(a.get("migVol"), 0)
 
+    # Issue #5: security products bring an extra stakeholder set (security
+    # ops, identity, sometimes compliance) and different agent/IAM patterns.
+    # Bumps every methodology when security is in scope.
+    sec = 12 if a.get("securityScope") == "yes" else 0
+
+    # Issue #6: decentralised authority (auto) in any multi-team setup adds
+    # cross-team coordination overhead that the methodology label alone
+    # doesn't capture.
+    auto_overhead = 8 if a.get("authority") == "auto" and not single else 0
+
     def adj(mn: int, mx: int, ex: int = 0) -> dict:
-        return {"sMin": round((mn + pb + ex) * cm), "sMax": round((mx + pb + ex) * cm)}
+        bump = pb + ex + sec + auto_overhead
+        return {"sMin": round((mn + bump) * cm), "sMax": round((mx + bump) * cm)}
 
     if remediation:
         b = (10, 20) if single else (30, 55) if multi else (55, 100) if enterprise else (80, 140)
@@ -249,8 +284,19 @@ def recommend(a: dict) -> dict:
             b = (90, 150)
         return {"key": "migration", **adj(b[0], b[1], mv)}
 
-    if a.get("compliance") == "yes" and not single:
-        b = (80, 150) if large else (45, 85) if enterprise else (25, 50)
+    # Issue #2: compliance applies to single teams too — bumps them out of
+    # plain handsOnKeys into the compliance-first pattern with a
+    # single-team-sized base. Removes the silent gap where a regulated
+    # single team got the same session count as an unregulated one.
+    if a.get("compliance") == "yes":
+        if single:
+            b = (15, 30)
+        elif multi:
+            b = (25, 50)
+        elif enterprise:
+            b = (45, 85)
+        else:
+            b = (80, 150)
         return {"key": "complianceFirst", **adj(b[0], b[1])}
 
     if single:
@@ -270,7 +316,7 @@ def recommend(a: dict) -> dict:
             **adj(25, 50)}
 
 
-def build_flags(a: dict, key: str) -> list[dict]:
+def build_flags(a: dict, key: str, s_max: int | None = None) -> list[dict]:
     f: list[dict] = []
     if key == "political":
         f.append({"t": "blk", "m": "No internal champion identified. IS cannot be sold until a sponsor is confirmed."})
@@ -285,6 +331,8 @@ def build_flags(a: dict, key: str) -> list[dict]:
         f.append({"t": "wrn", "m": "Hard deadline: scope must be locked in session 1. Never compress sessions — reduce scope instead."})
     if a.get("compliance") == "yes":
         f.append({"t": "inf", "m": "Regulated industry: security and legal must be named stakeholders from session 1."})
+    if a.get("securityScope") == "yes":
+        f.append({"t": "inf", "m": "Security products in scope: security ops + identity teams join as stakeholders. CSPM/CWPP have different agent and IAM patterns from observability — plan extra cycles for those decisions."})
     if a.get("authority") == "auto" and a.get("teamCount") != "single":
         f.append({"t": "wrn", "m": "No central authority: adoption cannot be mandated. Exec mandate essential for scale beyond the pilot team."})
     if a.get("migVol") == "unk":
@@ -293,6 +341,11 @@ def build_flags(a: dict, key: str) -> list[dict]:
         f.append({"t": "wrn", "m": "500+ dashboards/alerts: structure as multi-phase migration."})
     if a.get("teamCount") == "large":
         f.append({"t": "inf", "m": "Large enterprise: cap each SOW phase at 50–60 sessions."})
+
+    # Sanity dampener: outputs >200 sessions are a real engagement-management
+    # risk, not a "just run it" sized deal. Surface it.
+    if s_max is not None and s_max > 200:
+        f.append({"t": "wrn", "m": f"Estimate exceeds 200 sessions ({s_max}). Strongly consider phased SOWs (50–60 sessions each) to manage delivery risk and let the customer absorb learnings between phases."})
 
     if not f:
         f.append({"t": "ok", "m": "No major risk flags. Standard scoping process applies."})
@@ -316,6 +369,8 @@ def build_next_steps(a: dict, key: str) -> list[str]:
         ns.append("Confirm a named pilot team and published rollout sequence before IS kickoff.")
     if a.get("compliance") == "yes":
         ns.append("Introduce IS team to security and legal stakeholders before scoping is finalised.")
+    if a.get("securityScope") == "yes":
+        ns.append("Identify security-ops and identity-team stakeholders. Security products follow different review cycles than engineering — surface that to AE before the deal closes.")
     if a.get("migVol") == "unk":
         ns.append("Schedule a tool audit session before final pricing — estimate will change significantly.")
 
