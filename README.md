@@ -11,17 +11,17 @@ Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 ```bash
 uv sync
 cp .env.example .env
-uv run streamlit run streamlit_app.py
+uv run streamlit run Scope_an_opportunity.py
 ```
 
 First Snowflake query opens a browser for Datadog SSO. Subsequent queries reuse the cached token.
 
-Note: the app guards every screen behind `st.login()` with Google OAuth (`hd=datadoghq.com`). Local runs therefore need either a `.streamlit/secrets.toml` with a Google OAuth client, or you temporarily comment out the auth block at the top of `streamlit_app.py`.
+Note: the app guards every screen behind `st.login()` with Google OAuth (`hd=datadoghq.com`). Local runs therefore need either a `.streamlit/secrets.toml` with a Google OAuth client, or you temporarily comment out the auth block at the top of `Scope_an_opportunity.py`.
 
 ## Project structure
 
 ```
-streamlit_app.py        # UI: search, questionnaire, review, result
+Scope_an_opportunity.py        # UI: search, questionnaire, review, result
 snowflake_lookup.py     # Snowflake connection + lookup + field mapper
 methodologies.py        # QUESTIONS, METHODS, recommend, flags, next steps
 scoping_doc.py          # Copy-paste summary formatter
@@ -42,7 +42,7 @@ Runs on Cloud Run in `datadog-tam-sandbox`, region `us-central1`. Howler was the
 
 - Cloud Run service is `--allow-unauthenticated` (so the OAuth dance can happen).
 - Streamlit's native `st.login()` runs the Google OAuth flow with `hd=datadoghq.com`, which restricts the Google sign-in screen to the Datadog Workspace.
-- `streamlit_app.py` re-checks `st.user.email` server-side after sign-in (defense in depth).
+- `Scope_an_opportunity.py` re-checks `st.user.email` server-side after sign-in (defense in depth).
 
 Same pattern as `splunk-dd-migration-mcp`.
 

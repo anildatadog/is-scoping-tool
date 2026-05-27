@@ -162,7 +162,12 @@ QUESTIONS: list[dict] = [
             {"v": "no", "l": "No — observability/APM/logs only",
              "s": "Standard engineering stakeholders"},
         ],
-        "show": lambda a: True,
+        # Skip when productCount already implies broad surface — at 5-7 or
+        # suite, security products are almost always in scope, so the
+        # diagnosis defaults to securityScope=yes (handled in diagnosis.py
+        # and the SF mapper). For 1-2 / 3-4 the answer is genuinely
+        # ambiguous (could be APM+Logs or could be CSPM+SDS), so we ask.
+        "show": lambda a: a.get("productCount") in {"1-2", "3-4"},
     },
 ]
 

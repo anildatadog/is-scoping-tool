@@ -49,7 +49,7 @@ done
 echo "[entrypoint] secrets.toml (values masked):"
 sed 's/"[^"]\{4,\}"/"****"/g' /app/.streamlit/secrets.toml | sed 's/^/  /'
 
-exec streamlit run streamlit_app.py \
+exec streamlit run Scope_an_opportunity.py \
   --server.port="${PORT:-8080}" \
   --server.address=0.0.0.0 \
   --server.headless=true
