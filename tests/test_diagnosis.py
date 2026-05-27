@@ -52,13 +52,48 @@ MIGRATION_HEAVY = {
 SINGLE_TEAM_NEWBIE = {
     "ddStatus": "new",
     "replacingTool": "no",
-    "teamCount": "single",
-    "productCount": "1-2",
+    "teamCount": "multi",  # avoid the manager-sponsor + single-team Defer trigger
+    "productCount": "3-4",
     "sponsor": "manager",
     "capability": "limited",
     "urgency": "flex",
     "compliance": "no",
     "securityScope": "no",
+}
+
+# Defer cases — verdict, not engagement.
+
+NO_SPONSOR = {
+    "ddStatus": "new", "replacingTool": "no",
+    "teamCount": "multi", "productCount": "3-4",
+    "sponsor": "none", "authority": "central",
+    "capability": "some", "urgency": "flex",
+    "compliance": "no", "securityScope": "no",
+}
+
+ENGINEER_NO_FORCING = {
+    "ddStatus": "live", "ddQuality": "good",
+    "teamCount": "enterprise", "productCount": "3-4",
+    "sponsor": "engineer", "authority": "central",
+    "capability": "some", "urgency": "flex",
+    "compliance": "no", "securityScope": "no",
+}
+
+ENGINEER_WITH_COMPLIANCE_OVERRIDE = {
+    "ddStatus": "live", "ddQuality": "good",
+    "teamCount": "enterprise", "productCount": "3-4",
+    "sponsor": "engineer", "authority": "central",
+    "capability": "some", "urgency": "flex",
+    "compliance": "yes",  # forcing function — overrides engineer-sponsor Defer
+    "securityScope": "no",
+}
+
+VANITY_TOOLING = {
+    "ddStatus": "new", "replacingTool": "no",
+    "teamCount": "single", "productCount": "1-2",
+    "sponsor": "manager",  # director-tier but small scope, no pressure
+    "capability": "some", "urgency": "flex",
+    "compliance": "no", "securityScope": "no",
 }
 
 
@@ -96,6 +131,33 @@ def test_single_team_newbie_diagnoses_as_foundation_led_capability_gap():
     assert d["shape"]["value"] == "Foundation"
     assert d["posture"]["value"] == "IS-led"
     assert d["dominant_constraint"]["value"] == "capability gap"
+
+
+def test_no_sponsor_diagnoses_as_defer():
+    d = diagnose(NO_SPONSOR)
+    assert d["shape"]["value"] == "Defer"
+    assert any("frederique" in b.lower() for b in d["customer_ownership"])
+
+
+def test_engineer_sponsor_without_forcing_function_diagnoses_as_defer():
+    d = diagnose(ENGINEER_NO_FORCING)
+    assert d["shape"]["value"] == "Defer"
+
+
+def test_engineer_sponsor_with_compliance_does_not_defer():
+    d = diagnose(ENGINEER_WITH_COMPLIANCE_OVERRIDE)
+    assert d["shape"]["value"] != "Defer", (
+        "compliance=yes is a forcing function that should override the "
+        "engineer-sponsor Defer rule"
+    )
+
+
+def test_manager_sponsor_small_scope_diagnoses_as_defer():
+    # Wider Defer: director-tier sponsor at a Datadog customer doesn't mean
+    # automatic IS-feasibility — small scope + no forcing function is the
+    # vanity-tooling pattern and won't sustain budget through delivery.
+    d = diagnose(VANITY_TOOLING)
+    assert d["shape"]["value"] == "Defer"
 
 
 def test_diagnose_returns_full_dict_shape():

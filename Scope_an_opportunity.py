@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from diagnosis import diagnose, package_label
+from diagnosis import compute_defer_verdict, diagnose, package_label
 from methodologies import build_flags, build_next_steps, recommend, visible_questions
 from prose import generate as generate_prose
 from scoping_doc import build as build_scoping_doc
@@ -310,7 +310,10 @@ def render_questionnaire() -> None:
             st.session_state.screen = "review"
             st.rerun()
 
-    st.progress((step) / total, text=f"Question {step + 1} of {total}")
+    # Progress = completed questions / total. Hits 100% as soon as the last
+    # question is answered, before the AE clicks "See recommendation".
+    answered_count = sum(1 for qq in rem if st.session_state.answers.get(qq["id"]))
+    st.progress(answered_count / total, text=f"{answered_count} of {total} answered")
 
     q = rem[step]
     st.subheader(q["q"])
@@ -382,34 +385,58 @@ def render_result() -> None:
     sf_data = st.session_state.sf_data
     rec = recommend(answers)
     diag = diagnose(answers)
-    no_sess = rec["sMin"] is None
 
     account = (sf_data or {}).get("accountName")
     sub_tail = f" — {account}" if account else ""
 
     shape = diag["shape"]["value"]
-    posture = diag["posture"]["value"]
-    constraint = diag["dominant_constraint"]["value"]
+    is_defer = shape == "Defer"
 
-    # Prose layer — single Anthropic call, cached for ~15 min per answer set so
-    # toggling back to the result screen doesn't burn the API quota.
-    prose_cache = st.session_state.setdefault("prose_cache", {})
-    answers_key = repr(sorted(answers.items()))
-    if answers_key not in prose_cache:
-        with st.spinner("Writing diagnosis…"):
-            prose_cache[answers_key] = generate_prose(diag, answers)
-    prose = prose_cache[answers_key]
-
-    if prose:
+    # Headline prose: Defer uses a templated verdict; everything else routes
+    # through the LLM prose layer.
+    if is_defer:
+        v = compute_defer_verdict(answers)
         st.markdown(
             f"<div style='font-size:15px;line-height:1.55;'>"
-            f"<p><strong>Diagnosis.</strong> {prose['diagnosis_paragraph']}</p>"
-            f"<p><strong>Consequence.</strong> {prose['consequence_paragraph']}</p>"
+            f"<p><strong>Verdict.</strong> {v['verdict']}</p>"
+            f"<p><strong>What changes the picture.</strong> {v['what_changes']}</p>"
             f"</div>",
             unsafe_allow_html=True,
         )
         st.markdown("")
+    else:
+        # Prose layer — single Anthropic call, cached per answer set so toggling
+        # back to the result screen doesn't burn the API quota.
+        prose_cache = st.session_state.setdefault("prose_cache", {})
+        answers_key = repr(sorted(answers.items()))
+        if answers_key not in prose_cache:
+            with st.spinner("Writing diagnosis…"):
+                prose_cache[answers_key] = generate_prose(diag, answers)
+        prose = prose_cache[answers_key]
 
+        if prose:
+            st.markdown(
+                f"<div style='font-size:15px;line-height:1.55;'>"
+                f"<p><strong>Diagnosis.</strong> {prose['diagnosis_paragraph']}</p>"
+                f"<p><strong>Consequence.</strong> {prose['consequence_paragraph']}</p>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown("")
+
+    # Structured card. For Defer, show only the verdict label; the posture /
+    # dominant-constraint fields aren't meaningful for a "this isn't IS"
+    # output and would just confuse the reader.
+    if is_defer:
+        card_rows = '<div style="opacity:.6;">Verdict</div><div style="font-weight:500;">Defer — not an IS engagement (yet)</div>'
+    else:
+        posture = diag["posture"]["value"]
+        constraint = diag["dominant_constraint"]["value"]
+        card_rows = (
+            f'<div style="opacity:.6;">Shape</div><div style="font-weight:500;">{shape}</div>'
+            f'<div style="opacity:.6;">Posture</div><div style="font-weight:500;">{posture}</div>'
+            f'<div style="opacity:.6;">Dominant constraint</div><div style="font-weight:500;">{constraint}</div>'
+        )
     st.markdown(
         f"""
         <div style="background:#1c1c1c;padding:20px 22px;border-radius:8px;color:#fff;">
@@ -417,9 +444,7 @@ def render_result() -> None:
                 Diagnosis{sub_tail}
             </div>
             <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 18px;margin-top:10px;font-size:14px;">
-                <div style="opacity:.6;">Shape</div><div style="font-weight:500;">{shape}</div>
-                <div style="opacity:.6;">Posture</div><div style="font-weight:500;">{posture}</div>
-                <div style="opacity:.6;">Dominant constraint</div><div style="font-weight:500;">{constraint}</div>
+                {card_rows}
             </div>
         </div>
         """,
@@ -432,28 +457,30 @@ def render_result() -> None:
                 contribs = ", ".join(t["contributed_to"])
                 st.markdown(f"- `{t['signal']} = {t['value']}` → {contribs}")
 
-    st.subheader("Customer ownership")
+    st.subheader("Next steps" if is_defer else "Customer ownership")
     for bullet in diag["customer_ownership"]:
         st.markdown(f"- {bullet}")
 
-    flags = build_flags(answers, rec["key"], rec.get("sMax"))
-    if flags:
-        st.subheader("Risk flags")
-        for f in flags:
-            _FLAG_RENDER.get(f["t"], st.info)(f["m"])
+    if not is_defer:
+        flags = build_flags(answers, rec["key"], rec.get("sMax"))
+        if flags:
+            st.subheader("Risk flags")
+            for f in flags:
+                _FLAG_RENDER.get(f["t"], st.info)(f["m"])
 
-    st.subheader("Before you close the IS deal — confirm these")
-    for i, n in enumerate(build_next_steps(answers, rec["key"]), start=1):
-        st.markdown(f"**{i}.** {n}")
+        st.subheader("Before you close the IS deal — confirm these")
+        for i, n in enumerate(build_next_steps(answers, rec["key"]), start=1):
+            st.markdown(f"**{i}.** {n}")
 
-    st.subheader("Commercial")
-    st.caption("Heuristic — calibration data pending. Treat as range, not commitment.")
-    if no_sess:
-        st.warning("Resolve sponsor blocker before estimating sessions.")
-    else:
-        c1, c2 = st.columns(2)
-        c1.metric("Package", package_label(rec["sMax"]))
-        c2.metric("Session estimate", f"{rec['sMin']}–{rec['sMax']}")
+        no_sess = rec["sMin"] is None
+        st.subheader("Commercial")
+        st.caption("Heuristic — calibration data pending. Treat as range, not commitment.")
+        if no_sess:
+            st.warning("Resolve sponsor blocker before estimating sessions.")
+        else:
+            c1, c2 = st.columns(2)
+            c1.metric("Package", package_label(rec["sMax"]))
+            c2.metric("Session estimate", f"{rec['sMin']}–{rec['sMax']}")
 
     st.subheader("Copy scoping summary")
     st.caption("Click the copy icon (top right of the code block) to paste into Slack, Jira, or email.")

@@ -187,7 +187,14 @@ def generate(diagnosis: dict, answers: dict) -> ProseOutput | None:
 
     Returns None on any failure (missing key, API error, parse error). Caller
     must handle None by rendering the structured diagnosis without prose.
+
+    For shape=Defer, returns None — the caller should render the templated
+    verdict from diagnosis.compute_defer_verdict() instead. Defer is a verdict
+    and reads better from a deterministic template than an LLM paragraph.
     """
+    if diagnosis["shape"]["value"] == "Defer":
+        return None
+
     # Strip whitespace defensively — Secret Manager values can include a
     # trailing newline when provisioned via `op read | gcloud secrets create`,
     # which causes the SDK to construct an invalid x-api-key header (newlines

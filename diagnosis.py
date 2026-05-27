@@ -44,6 +44,50 @@ def compute_shape(a: dict) -> _Field:
     authority     = a.get("authority")
     team_count    = a.get("teamCount")
     product_count = a.get("productCount")
+    sponsor       = a.get("sponsor")
+    urgency       = a.get("urgency")
+    compliance    = a.get("compliance")
+
+    # Defer fires before any other shape. The signal is "IS budget is unlikely
+    # to land or the deal will stall." Director+ sponsorship is the structural
+    # gate for IS budget; without it (or without a forcing function like a
+    # hard regulatory deadline) the engagement is premature.
+    #
+    # Forcing functions that override the weak-sponsor signal:
+    #   urgency=hard   — external deadline forces budget escalation
+    #   compliance=yes — regulatory exposure forces director attention
+    forcing_function = urgency == "hard" or compliance == "yes"
+
+    if sponsor == "none":
+        return {"value": "Defer", "triggers": [("sponsor", "none")]}
+
+    if sponsor == "engineer" and not forcing_function:
+        return {
+            "value": "Defer",
+            "triggers": [
+                ("sponsor", "engineer"),
+                ("__note__", "no urgency or compliance forcing function"),
+            ],
+        }
+
+    # Wider Defer: manager-level sponsor with a small, low-pressure scope is
+    # the "vanity tooling" pattern — a Director Of Something signs up but the
+    # deal isn't substantial enough to maintain attention through delivery.
+    if (
+        sponsor == "manager"
+        and team_count == "single"
+        and product_count in {"1-2"}
+        and not forcing_function
+    ):
+        return {
+            "value": "Defer",
+            "triggers": [
+                ("sponsor", "manager"),
+                ("teamCount", "single"),
+                ("productCount", "1-2"),
+                ("__note__", "small scope, no urgency or compliance forcing function"),
+            ],
+        }
 
     # Gap-filler precedes Foundation: a large migration into a new DD deployment
     # is shaped by the migration parity work, not by greenfield architectural
@@ -299,7 +343,81 @@ _OWNERSHIP_BASE: dict[tuple[str, str], list[str]] = {
 }
 
 
+_DEFER_NEXT_STEPS: list[str] = [
+    "For a second opinion before deferring, contact Frédérique Martin Sainte-Agathe (IS management sponsor): frederique.martinsainteagathe@datadoghq.com.",
+    "Customer-led adoption with TAM support — Datadog as a product still delivers value without IS sessions.",
+    "Partner-led delivery if the work is repetitive execution rather than architectural — engage a Datadog partner.",
+    "Revisit IS when a director-or-above champion is named, OR an external forcing function appears (regulatory deadline, compliance audit, hard contract date).",
+]
+
+
+class DeferVerdict(TypedDict):
+    verdict: str
+    what_changes: str
+
+
+def compute_defer_verdict(answers: dict) -> DeferVerdict:
+    """Templated verdict prose for shape=Defer. Branches by which trigger
+    fired so the verdict says something specific about *this* engagement,
+    not a generic 'not yet IS' boilerplate.
+    """
+    sponsor = answers.get("sponsor")
+
+    if sponsor == "none":
+        verdict = (
+            "This is not yet an IS engagement. No champion has been identified at "
+            "the customer, which means there is no budget owner, no internal advocate "
+            "to keep the work moving, and no decision-maker who will defend the "
+            "engagement's value at quarterly review. IS sessions without that anchor "
+            "stall before they start."
+        )
+    elif sponsor == "engineer":
+        verdict = (
+            "This is not yet an IS engagement. Engineer-level sponsorship is a "
+            "signal that the technical team sees value, but IS budget rarely lands "
+            "without director-or-above approval. Without a regulatory deadline or "
+            "compliance pressure forcing exec attention, the deal will stall at "
+            "budget approval or be cut mid-cycle when priorities shift."
+        )
+    elif sponsor == "manager":
+        # The vanity-tooling pattern: director-tier sponsor + small scope +
+        # no forcing function.
+        verdict = (
+            "This is not yet an IS engagement. A director-tier sponsor exists, "
+            "but the combination of small scope (single team, narrow product "
+            "footprint) and no external forcing function is the vanity-tooling "
+            "pattern. The sponsor approves the deal but disengages once it lands "
+            "at the next quarterly priority shift. The commercial completes; the "
+            "work does not get operationalised."
+        )
+    else:
+        # Defensive fallback — shouldn't be reachable given the compute_shape rules.
+        verdict = (
+            "This is not yet an IS engagement. The combination of signals suggests "
+            "the engagement will not sustain attention through delivery. Re-scope "
+            "or wait for the conditions below to change."
+        )
+
+    what_changes = (
+        "What would change the picture: a named director-or-above champion willing "
+        "to authorise IS spend, or an external forcing function — regulatory "
+        "deadline, compliance audit, hard contract date — that compels exec "
+        "attention. Either unlocks the budget conversation and the sustained "
+        "stakeholder presence the engagement needs. In the meantime, the customer "
+        "is well-served by Datadog as a product, with TAM support for ongoing "
+        "advisory and a delivery partner for execution-heavy needs. The escalation "
+        "line above is the path if you read this diagnosis differently."
+    )
+
+    return {"verdict": verdict, "what_changes": what_changes}
+
+
 def compute_customer_ownership(a: dict, shape: str, posture: str) -> list[str]:
+    # Defer is a verdict, not an engagement. Surface next-step alternatives
+    # rather than the customer-must-own bullets that other shapes produce.
+    if shape == "Defer":
+        return list(_DEFER_NEXT_STEPS)
+
     bullets: list[str] = list(_OWNERSHIP_BASE.get((shape, posture), [
         "Execution ownership — IS does not run the deployment.",
         "Prioritisation and cross-team coordination.",
@@ -311,10 +429,21 @@ def compute_customer_ownership(a: dict, shape: str, posture: str) -> list[str]:
         bullets.append("Named decommission owner for the incumbent tool.")
     if a.get("authority") == "auto" and a.get("teamCount") != "single":
         bullets.append("Central authority delegated, or rollout will fragment across teams.")
-    if a.get("securityScope") == "yes":
+    if _security_in_scope(a):
         bullets.append("Security ops and identity teams named as stakeholders from session 1.")
 
     return bullets
+
+
+def _security_in_scope(a: dict) -> bool:
+    """Effective securityScope: the explicit answer if asked, otherwise infer
+    'yes' when productCount is 5-7 or suite (the questionnaire skips the
+    explicit question for those breadths because they almost always include
+    security products)."""
+    explicit = a.get("securityScope")
+    if explicit:
+        return explicit == "yes"
+    return a.get("productCount") in {"5-7", "suite"}
 
 
 # ──────────────────────────────────────────────────────────────────
