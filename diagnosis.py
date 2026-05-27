@@ -161,14 +161,29 @@ def compute_posture(a: dict) -> _Field:
     if capability == "limited":
         return {"value": "IS-led", "triggers": [("capability", "limited")]}
 
-    # IS-executes fires on heavy migration regardless of capability: the parity
-    # work and cutover demand sustained hands-on attention that few customers
-    # absorb cleanly alongside their normal load. Strong-capability customers
-    # *can* execute themselves, but the default and safer scoping is IS-executes.
-    if replacing == "yes" and mig_vol in {"l", "xl"}:
+    # Heavy migration volume (xl) routes to IS-led, NOT IS-executes. Policy
+    # decision 2026-05-27: IS is not scaled for hands-on migration labour at
+    # this volume — IS owns architecture and target-state design, and the
+    # hands-on work goes to a delivery partner or the customer's own team.
+    # The "Get away from heavy HOK engagements" rule.
+    if replacing == "yes" and mig_vol == "xl":
+        return {
+            "value": "IS-led",
+            "triggers": [
+                ("replacingTool", "yes"),
+                ("migVol", "xl"),
+                ("__note__", "high-volume migration → IS architects, partner or customer executes"),
+            ],
+        }
+
+    # Moderate migration volume (l) — IS-executes is acceptable if the
+    # customer can't shoulder it alone. Strong-capability customers should
+    # still take execution themselves.
+    if replacing == "yes" and mig_vol == "l" and capability != "strong":
         return {
             "value": "IS-executes",
-            "triggers": [("replacingTool", "yes"), ("migVol", mig_vol or "")],
+            "triggers": [("replacingTool", "yes"), ("migVol", "l"),
+                         ("capability", capability or "unknown")],
         }
 
     if urgency == "hard" and capability != "strong":
@@ -316,8 +331,9 @@ _OWNERSHIP_BASE: dict[tuple[str, str], list[str]] = {
         "Change-management ownership for the cutover window.",
     ],
     ("Gap-filler", "IS-led"): [
-        "Resource the remediation work alongside IS.",
-        "Decommission ownership and audit-trail sign-off.",
+        "Resource the execution — IS provides architecture and the target-state design; customer or a delivery partner does the hands-on migration / remediation work.",
+        "Engage a Datadog delivery partner if the volume exceeds in-house capacity. IS is not scaled for heavy hands-on migration; sustained HOK labour is partner or customer work.",
+        "Named decommission owner and audit-trail sign-off for the legacy path.",
         "Standards adoption — accept and operate the IS-defined target state.",
     ],
     ("Gap-filler", "IS-advisory"): [
@@ -432,18 +448,39 @@ def compute_customer_ownership(a: dict, shape: str, posture: str) -> list[str]:
     if _security_in_scope(a):
         bullets.append("Security ops and identity teams named as stakeholders from session 1.")
 
+    topology = a.get("infraTopology")
+    if topology == "multi-cloud":
+        bullets.append("Named cloud-platform lead per cloud — IAM and integration accounts owned per provider.")
+    elif topology == "sovereign":
+        bullets.append("Data residency + DD site selection sign-off before any agent install.")
+    elif topology == "gpu-aas":
+        bullets.append("AI/HPC telemetry scope agreed — LLM Obs surface, GPU metrics, custom workload identification.")
+    elif topology == "byoc":
+        bullets.append("Customer owns install + version-upgrade cadence; agent rollout cadence aligned to their release cycle.")
+    elif topology == "hybrid":
+        bullets.append("Dual-deployment plumbing — cloud agent + on-prem agent or bridge — and the bridge owner named.")
+
     return bullets
 
 
 def _security_in_scope(a: dict) -> bool:
-    """Effective securityScope: the explicit answer if asked, otherwise infer
-    'yes' when productCount is 5-7 or suite (the questionnaire skips the
-    explicit question for those breadths because they almost always include
-    security products)."""
+    """Inferred securityScope. The explicit question was dropped 2026-05-27;
+    we infer from productCount + compliance:
+      - 5-7 or suite           → yes (broad scope almost always touches security)
+      - 3-4 + compliance=yes   → yes (regulated industry with mid scope usually has CSPM/SDS/SIEM)
+      - otherwise              → no
+    Fallback: honour an explicit securityScope answer if one slipped in via
+    SF prefill or test fixtures.
+    """
     explicit = a.get("securityScope")
     if explicit:
         return explicit == "yes"
-    return a.get("productCount") in {"5-7", "suite"}
+    product_count = a.get("productCount")
+    if product_count in {"5-7", "suite"}:
+        return True
+    if product_count == "3-4" and a.get("compliance") == "yes":
+        return True
+    return False
 
 
 # ──────────────────────────────────────────────────────────────────

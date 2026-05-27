@@ -1,110 +1,127 @@
 """Formats the copy-paste scoping summary for the v2 structured diagnosis output.
 
-Replaces the v1 methodology-driven summary. The session-estimate math from
-methodologies.recommend() is retained and rendered as the commercial footer.
+Compressed layout: single-line header, LLM prose paragraphs first (so the
+copy-paste reads the same quality as the in-browser version), then the
+actionable bullets, then a one-line audit footer. Session estimate is hidden
+when it exceeds the threshold where the number stops being defensible.
 """
 from __future__ import annotations
 
 from datetime import date
 
-from diagnosis import Diagnosis, package_label
+from diagnosis import Diagnosis, compute_defer_verdict
 from methodologies import build_flags, build_next_steps
 
 
-_TEAM_LABEL = {
-    "single":     "1 team",
-    "multi":      "2–5 teams",
-    "enterprise": "6–15 teams",
-    "large":      "15+ teams/BUs",
-}
-
-_PRODUCT_LABEL = {
-    "1-2":   "1–2 products",
-    "3-4":   "3–4 products",
-    "5-7":   "5–7 products",
-    "suite": "full product suite",
-}
+# When the v1 session-estimate upper bound exceeds this, hide the specific
+# range and surface "Multi-phase, phase into smaller SOWs" instead. The number
+# above the threshold has no calibrated basis and tends to scare AEs more
+# than inform them. Cap chosen at 80 because the largest active IS engagement
+# (FCA, 80 sessions over 6 months) sits at the upper boundary of what a
+# single SOW can plausibly hold.
+_SESSION_DISPLAY_CAP = 80
 
 
-def build(sf_data: dict | None, answers: dict, rec: dict, diag: Diagnosis) -> str:
+def _commercial_line(rec: dict) -> str:
+    if rec["sMin"] is None:
+        return "Commercial: resolve sponsor blocker before estimating sessions."
+    if rec["sMax"] > _SESSION_DISPLAY_CAP:
+        return (
+            "Commercial: Multi-phase. Phase into SOWs of ~30-60 sessions each; "
+            "programme size confirmed post-discovery. Numbers heuristic, calibration pending."
+        )
+    label = _package_label_short(rec["sMax"])
+    return f"Commercial: {label} · {rec['sMin']}-{rec['sMax']} sessions (heuristic, calibration pending)."
+
+
+def _package_label_short(s_max: int) -> str:
+    if s_max <= 30:
+        return "Starter"
+    if s_max <= 60:
+        return "Standard"
+    return "Enterprise"  # > 60 but <= cap
+
+
+def _triggers_one_line(diag: Diagnosis) -> str:
+    parts = [f"{t['signal']}={t['value']}" for t in diag["triggers"]]
+    return " · ".join(parts) if parts else "(none)"
+
+
+def build(sf_data: dict | None, answers: dict, rec: dict, diag: Diagnosis,
+          prose: dict | None = None) -> str:
     today = date.today().strftime("%d %b %Y")
-    no_sess = rec["sMin"] is None
-
-    ctx: list[str] = []
-    if answers.get("teamCount"):
-        ctx.append(_TEAM_LABEL[answers["teamCount"]])
-    if answers.get("productCount"):
-        ctx.append(_PRODUCT_LABEL[answers["productCount"]] + " in scope")
-    if answers.get("ddStatus") == "live":
-        ctx.append("existing DD customer")
-    if answers.get("replacingTool") == "yes":
-        ctx.append("replacing incumbent tool")
-    if answers.get("compliance") == "yes":
-        ctx.append("regulated industry")
-
-    flags = [f for f in build_flags(answers, rec["key"], rec.get("sMax")) if f["t"] != "ok"]
-    ns = build_next_steps(answers, rec["key"])
     rule = "━" * 40
 
     account_name = (sf_data or {}).get("accountName") or "[Account Name]"
-    opp_name = (sf_data or {}).get("oppName") or "[not specified]"
+    opp_name = (sf_data or {}).get("oppName")
+    header_tail = f" · {opp_name}" if opp_name else ""
 
     shape = diag["shape"]["value"]
+    is_defer = shape == "Defer"
+
+    triggers_line = _triggers_one_line(diag)
+    ownership_lines = "\n".join(f"  • {b}" for b in diag["customer_ownership"])
+
+    # ── Defer branch ──────────────────────────────────────────────────
+    if is_defer:
+        v = compute_defer_verdict(answers)
+        return (
+            f"IS SCOPING SUMMARY\n{rule}\n"
+            f"Customer: {account_name}{header_tail} · {today}\n"
+            f"\n"
+            f"Verdict: Defer — not yet an IS engagement.\n"
+            f"\n"
+            f"{v['verdict']}\n"
+            f"\n"
+            f"{v['what_changes']}\n"
+            f"\n"
+            f"Next steps\n"
+            f"{ownership_lines}\n"
+            f"\n"
+            f"Triggers (audit): {triggers_line}\n"
+            f"{rule}"
+        )
+
+    # ── Engagement-shape branch ───────────────────────────────────────
     posture = diag["posture"]["value"]
     constraint = diag["dominant_constraint"]["value"]
 
-    trigger_lines = "\n".join(
-        f"  {t['signal']:<15} = {t['value']:<10} → {', '.join(t['contributed_to'])}"
-        for t in diag["triggers"]
-    ) or "  (no triggers fired — fallback diagnosis)"
-
-    ownership_lines = "\n".join(f"  • {b}" for b in diag["customer_ownership"]) \
-        or "  (no specific ownership bullets — review manually)"
-
-    if no_sess:
-        commercial_block = (
-            "\nCOMMERCIAL · heuristic\n"
-            "  Status: resolve sponsor blocker before estimating sessions\n"
+    if prose and prose.get("diagnosis_paragraph") and prose.get("consequence_paragraph"):
+        prose_block = (
+            f"\n{prose['diagnosis_paragraph']}\n"
+            f"\n{prose['consequence_paragraph']}\n"
         )
     else:
-        commercial_block = (
-            f"\nCOMMERCIAL · heuristic, calibration data pending\n"
-            f"  Package:           {package_label(rec['sMax'])}\n"
-            f"  Session estimate:  {rec['sMin']}–{rec['sMax']}\n"
-            f"  Caveat:            estimates remain heuristic until calibration data accrues\n"
-        )
+        # Graceful fallback when LLM prose isn't available (API error, key
+        # missing, etc.). Skip the prose block; the structured fields below
+        # still carry the diagnosis.
+        prose_block = ""
 
+    flags = [f for f in build_flags(answers, rec["key"], rec.get("sMax")) if f["t"] != "ok"]
+    ns = build_next_steps(answers, rec["key"])
     risk_block = ""
     if flags:
         risk_lines = "\n".join(f"⚠  {f['m']}" for f in flags)
-        risk_block = f"\nRISK FLAGS\n{risk_lines}\n"
+        risk_block = f"\nRisk flags\n{risk_lines}\n"
 
     pre_close_lines = "\n".join(f"{i+1}. {n}" for i, n in enumerate(ns))
-    context_line = " · ".join(ctx) if ctx else "See answers below"
 
     return (
-        f"IS SCOPING SUMMARY\n"
-        f"{rule}\n"
-        f"Customer:     {account_name}\n"
-        f"Opportunity:  {opp_name}\n"
-        f"Date:         {today}\n"
+        f"IS SCOPING SUMMARY\n{rule}\n"
+        f"Customer: {account_name}{header_tail} · {today}\n"
         f"\n"
-        f"DIAGNOSIS\n"
-        f"  Shape:                {shape}\n"
-        f"  Posture:              {posture}\n"
-        f"  Dominant constraint:  {constraint}\n"
+        f"Diagnosis: {shape} · {posture} · {constraint}\n"
+        f"{prose_block}"
         f"\n"
-        f"  Triggers\n"
-        f"{trigger_lines}\n"
-        f"\n"
-        f"CONTEXT\n"
-        f"  {context_line}\n"
-        f"\n"
-        f"CUSTOMER OWNERSHIP\n"
+        f"Customer ownership\n"
         f"{ownership_lines}\n"
         f"{risk_block}"
-        f"{commercial_block}"
-        f"\nPRE-CLOSE REQUIREMENTS\n"
+        f"\n"
+        f"{_commercial_line(rec)}\n"
+        f"\n"
+        f"Pre-close\n"
         f"{pre_close_lines}\n"
+        f"\n"
+        f"Triggers (audit): {triggers_line}\n"
         f"{rule}"
     )

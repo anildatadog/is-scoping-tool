@@ -85,6 +85,25 @@ QUESTIONS: list[dict] = [
         "show": lambda a: True,
     },
     {
+        "id": "infraTopology",
+        "q": "What infra topology will Datadog be deployed against?",
+        "opts": [
+            {"v": "single-cloud", "l": "Single public cloud (AWS, Azure, or GCP)",
+             "s": "Baseline. One cloud-platform integration, one IAM model, standard agent footprint."},
+            {"v": "multi-cloud", "l": "Multi-cloud — two or more public clouds in active use",
+             "s": "Per-cloud integration accounts and IAM strategies; cross-cloud tag normalisation surface."},
+            {"v": "sovereign", "l": "Sovereign / regulated cloud (gov cloud, in-country residency)",
+             "s": "DD site selection + data residency sign-off; not all products available in all sovereign regions."},
+            {"v": "gpu-aas", "l": "GPU-as-a-Service or custom HPC fleet (CoreWeave, RunPod, custom GPU infra)",
+             "s": "AI/HPC workload telemetry; LLM Obs likely in scope; novel agent + integration patterns."},
+            {"v": "byoc", "l": "BYOC — customer-managed infra hosting their workloads",
+             "s": "Customer owns install + upgrade lifecycle. IS often executes initial hardening + handover."},
+            {"v": "hybrid", "l": "Hybrid (on-prem + cloud)",
+             "s": "Dual-deployment plumbing — agent + on-prem bridge — across two operational domains."},
+        ],
+        "show": lambda a: True,
+    },
+    {
         "id": "sponsor",
         "q": "Who is actively sponsoring this project at the customer?",
         "sfField": "Opportunity › Champion + Economic Buyer",
@@ -153,22 +172,11 @@ QUESTIONS: list[dict] = [
         ],
         "show": lambda a: True,
     },
-    {
-        "id": "securityScope",
-        "q": "Are Cloud Security products in scope?",
-        "opts": [
-            {"v": "yes", "l": "Yes — CSPM, CWPP, ASM, Cloud SIEM, or Sensitive Data Scanner",
-             "s": "Security products bring security ops + identity teams as stakeholders; agent and IAM patterns differ from observability"},
-            {"v": "no", "l": "No — observability/APM/logs only",
-             "s": "Standard engineering stakeholders"},
-        ],
-        # Skip when productCount already implies broad surface — at 5-7 or
-        # suite, security products are almost always in scope, so the
-        # diagnosis defaults to securityScope=yes (handled in diagnosis.py
-        # and the SF mapper). For 1-2 / 3-4 the answer is genuinely
-        # ambiguous (could be APM+Logs or could be CSPM+SDS), so we ask.
-        "show": lambda a: a.get("productCount") in {"1-2", "3-4"},
-    },
+    # securityScope question removed 2026-05-27. The signal it captured —
+    # whether security ops / identity teams will be stakeholders — is now
+    # inferred from productCount + compliance (see diagnosis._security_in_scope).
+    # Asking it explicitly felt redundant with productCount, and the inferred
+    # rule covers the same cases without the extra question.
 ]
 
 
@@ -264,16 +272,36 @@ def recommend(a: dict) -> dict:
 
     # Issue #5: security products bring an extra stakeholder set (security
     # ops, identity, sometimes compliance) and different agent/IAM patterns.
-    # Bumps every methodology when security is in scope.
-    sec = 12 if a.get("securityScope") == "yes" else 0
+    # Bumps every methodology when security is implicitly in scope. The
+    # explicit securityScope question was dropped 2026-05-27; we infer from
+    # productCount + compliance instead (matches diagnosis._security_in_scope).
+    sec_in_scope = (
+        a.get("productCount") in {"5-7", "suite"}
+        or (a.get("productCount") == "3-4" and a.get("compliance") == "yes")
+    )
+    sec = 12 if sec_in_scope else 0
 
     # Issue #6: decentralised authority (auto) in any multi-team setup adds
     # cross-team coordination overhead that the methodology label alone
     # doesn't capture.
     auto_overhead = 8 if a.get("authority") == "auto" and not single else 0
 
+    # Issue #7: infra topology adds engagement complexity orthogonal to the
+    # methodology label. Each topology has its own integration / agent / IAM
+    # pattern that needs sessions to design and validate. Bumps are heuristic,
+    # uncalibrated — they only influence the v1 math, and the display layer
+    # caps the output above ~80 sessions regardless.
+    topo_bump = {
+        "single-cloud": 0,
+        "multi-cloud":  12,
+        "sovereign":     8,
+        "gpu-aas":      15,
+        "byoc":         20,
+        "hybrid":       10,
+    }.get(a.get("infraTopology"), 0)
+
     def adj(mn: int, mx: int, ex: int = 0) -> dict:
-        bump = pb + ex + sec + auto_overhead
+        bump = pb + ex + sec + auto_overhead + topo_bump
         return {"sMin": round((mn + bump) * cm), "sMax": round((mx + bump) * cm)}
 
     if remediation:
@@ -336,14 +364,28 @@ def build_flags(a: dict, key: str, s_max: int | None = None) -> list[dict]:
         f.append({"t": "wrn", "m": "Hard deadline: scope must be locked in session 1. Never compress sessions — reduce scope instead."})
     if a.get("compliance") == "yes":
         f.append({"t": "inf", "m": "Regulated industry: security and legal must be named stakeholders from session 1."})
-    if a.get("securityScope") == "yes":
+    if (a.get("productCount") in {"5-7", "suite"}
+            or (a.get("productCount") == "3-4" and a.get("compliance") == "yes")):
         f.append({"t": "inf", "m": "Security products in scope: security ops + identity teams join as stakeholders. CSPM/CWPP have different agent and IAM patterns from observability — plan extra cycles for those decisions."})
     if a.get("authority") == "auto" and a.get("teamCount") != "single":
         f.append({"t": "wrn", "m": "No central authority: adoption cannot be mandated. Exec mandate essential for scale beyond the pilot team."})
+    topo = a.get("infraTopology")
+    if topo == "multi-cloud":
+        f.append({"t": "inf", "m": "Multi-cloud: separate integration accounts + IAM per provider. Plan extra cycles for cross-cloud tag normalisation."})
+    elif topo == "sovereign":
+        f.append({"t": "wrn", "m": "Sovereign cloud: confirm DD site availability and customer data-residency requirements upfront — some products are not available in every sovereign region."})
+    elif topo == "gpu-aas":
+        f.append({"t": "inf", "m": "GPU/HPC fleet: LLM Obs and AI workload telemetry likely in scope. Novel telemetry shapes — plan extra discovery cycles."})
+    elif topo == "byoc":
+        f.append({"t": "wrn", "m": "BYOC: customer owns install + upgrade lifecycle. Confirm version-control ownership and upgrade cadence before kickoff."})
+    elif topo == "hybrid":
+        f.append({"t": "inf", "m": "Hybrid: dual-deployment plumbing — agent + on-prem bridge — needs a named owner for the bridge."})
+
     if a.get("migVol") == "unk":
         f.append({"t": "inf", "m": "Migration volume unknown: schedule a tool audit as session 1."})
     if a.get("migVol") == "xl":
         f.append({"t": "wrn", "m": "500+ dashboards/alerts: structure as multi-phase migration."})
+        f.append({"t": "wrn", "m": "High-volume migration: IS does NOT scale to hands-on (HOK) labour at this volume. Position as IS-architects + delivery-partner-or-customer-executes from the first conversation. Quote includes partner if customer can't absorb."})
     if a.get("teamCount") == "large":
         f.append({"t": "inf", "m": "Large enterprise: cap each SOW phase at 50–60 sessions."})
 
@@ -374,8 +416,16 @@ def build_next_steps(a: dict, key: str) -> list[str]:
         ns.append("Confirm a named pilot team and published rollout sequence before IS kickoff.")
     if a.get("compliance") == "yes":
         ns.append("Introduce IS team to security and legal stakeholders before scoping is finalised.")
-    if a.get("securityScope") == "yes":
+    if (a.get("productCount") in {"5-7", "suite"}
+            or (a.get("productCount") == "3-4" and a.get("compliance") == "yes")):
         ns.append("Identify security-ops and identity-team stakeholders. Security products follow different review cycles than engineering — surface that to AE before the deal closes.")
+    topo = a.get("infraTopology")
+    if topo == "multi-cloud":
+        ns.append("Identify a named cloud-platform lead per cloud before scoping is finalised.")
+    elif topo == "sovereign":
+        ns.append("Verify DD site availability and customer data-residency requirements before contracting.")
+    elif topo == "byoc":
+        ns.append("Confirm BYOC version-control and upgrade-cadence ownership at the customer.")
     if a.get("migVol") == "unk":
         ns.append("Schedule a tool audit session before final pricing — estimate will change significantly.")
 

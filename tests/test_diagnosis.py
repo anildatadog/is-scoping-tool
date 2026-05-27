@@ -19,7 +19,7 @@ BA_LIKE = {
     "capability": "strong",
     "urgency": "flex",
     "compliance": "yes",
-    "securityScope": "yes",
+    "infraTopology": "single-cloud",
 }
 
 FCA_LIKE = {
@@ -32,7 +32,7 @@ FCA_LIKE = {
     "capability": "strong",
     "urgency": "flex",
     "compliance": "yes",
-    "securityScope": "no",
+    "infraTopology": "single-cloud",
 }
 
 MIGRATION_HEAVY = {
@@ -46,7 +46,7 @@ MIGRATION_HEAVY = {
     "capability": "some",
     "urgency": "hard",
     "compliance": "no",
-    "securityScope": "no",
+    "infraTopology": "single-cloud",
 }
 
 SINGLE_TEAM_NEWBIE = {
@@ -58,7 +58,7 @@ SINGLE_TEAM_NEWBIE = {
     "capability": "limited",
     "urgency": "flex",
     "compliance": "no",
-    "securityScope": "no",
+    "infraTopology": "single-cloud",
 }
 
 # Defer cases — verdict, not engagement.
@@ -85,7 +85,6 @@ ENGINEER_WITH_COMPLIANCE_OVERRIDE = {
     "sponsor": "engineer", "authority": "central",
     "capability": "some", "urgency": "flex",
     "compliance": "yes",  # forcing function — overrides engineer-sponsor Defer
-    "securityScope": "no",
 }
 
 VANITY_TOOLING = {
@@ -118,12 +117,29 @@ def test_fca_like_diagnoses_as_accelerator_advisory_multi_team():
                for b in d["customer_ownership"])
 
 
-def test_migration_heavy_diagnoses_as_gapfiller_executes_deadline():
+def test_migration_heavy_diagnoses_as_gapfiller_isled_partner_executes():
+    # Policy 2026-05-27: high-volume migration (xl) goes to IS-led (architects),
+    # NOT IS-executes. IS does not scale to hands-on migration labour at this
+    # volume; partner or customer takes the HOK work. The ownership bullets
+    # must say so explicitly.
     d = diagnose(MIGRATION_HEAVY)
     assert d["shape"]["value"] == "Gap-filler"
-    assert d["posture"]["value"] == "IS-executes"
+    assert d["posture"]["value"] == "IS-led"
     assert d["dominant_constraint"]["value"] == "deadline"
+    assert any("partner" in b.lower() for b in d["customer_ownership"]), (
+        "high-volume Gap-filler ownership bullets must mention partner involvement"
+    )
     assert any("decommission" in b.lower() for b in d["customer_ownership"])
+
+
+def test_moderate_migration_with_weak_capability_still_isexecutes():
+    answers = dict(MIGRATION_HEAVY)
+    answers["migVol"] = "l"  # not xl
+    answers["urgency"] = "flex"  # remove hard-deadline forcing
+    d = diagnose(answers)
+    assert d["posture"]["value"] == "IS-executes", (
+        "moderate migration with weak capability should still allow IS-executes"
+    )
 
 
 def test_single_team_newbie_diagnoses_as_foundation_led_capability_gap():
@@ -158,6 +174,22 @@ def test_manager_sponsor_small_scope_diagnoses_as_defer():
     # vanity-tooling pattern and won't sustain budget through delivery.
     d = diagnose(VANITY_TOOLING)
     assert d["shape"]["value"] == "Defer"
+
+
+def test_multi_cloud_topology_adds_ownership_bullet():
+    answers = dict(FCA_LIKE)
+    answers["infraTopology"] = "multi-cloud"
+    d = diagnose(answers)
+    assert any("cloud-platform lead per cloud" in b.lower() or "cloud-platform" in b.lower()
+               for b in d["customer_ownership"])
+
+
+def test_byoc_topology_adds_ownership_bullet():
+    answers = dict(FCA_LIKE)
+    answers["infraTopology"] = "byoc"
+    d = diagnose(answers)
+    assert any("install" in b.lower() and "upgrade" in b.lower()
+               for b in d["customer_ownership"])
 
 
 def test_diagnose_returns_full_dict_shape():
