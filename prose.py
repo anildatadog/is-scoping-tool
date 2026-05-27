@@ -188,7 +188,12 @@ def generate(diagnosis: dict, answers: dict) -> ProseOutput | None:
     Returns None on any failure (missing key, API error, parse error). Caller
     must handle None by rendering the structured diagnosis without prose.
     """
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    # Strip whitespace defensively — Secret Manager values can include a
+    # trailing newline when provisioned via `op read | gcloud secrets create`,
+    # which causes the SDK to construct an invalid x-api-key header (newlines
+    # are illegal in HTTP header values) and leak the key into the error log.
+    api_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    if not api_key:
         log.warning("ANTHROPIC_API_KEY not set; skipping prose generation")
         return None
 
@@ -203,7 +208,7 @@ def generate(diagnosis: dict, answers: dict) -> ProseOutput | None:
     }
 
     try:
-        client = anthropic.Anthropic()
+        client = anthropic.Anthropic(api_key=api_key)
         messages = _few_shot_messages() + [
             {"role": "user", "content": json.dumps(request_input, indent=2)},
         ]

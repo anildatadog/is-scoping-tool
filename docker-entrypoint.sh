@@ -38,7 +38,7 @@ EOF
 # Debug: confirm env vars arrived and TOML got written. Mask all values longer
 # than 3 chars so secret contents never reach the log.
 echo "[entrypoint] env presence:"
-for v in OAUTH_REDIRECT_URI COOKIE_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET PORT; do
+for v in OAUTH_REDIRECT_URI COOKIE_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET ANTHROPIC_API_KEY PORT; do
   val=$(eval echo \$$v 2>/dev/null || true)
   if [ -n "$val" ]; then
     echo "  $v: set (len=${#val})"
