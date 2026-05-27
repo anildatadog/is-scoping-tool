@@ -560,7 +560,7 @@ def render_result() -> None:
     # Pass prose into the copy-paste builder so the Slack-ready output
     # carries the same consulting-voice paragraphs as the in-browser view.
     prose_for_doc = None if is_defer else (prose if "prose" in locals() else None)
-    st.code(build_scoping_doc(sf_data, answers, rec, diag, prose_for_doc), language=None)
+    st.code(build_scoping_doc(sf_data, answers, rec, diag, prose_for_doc), language=None, wrap_lines=True)
 
     st.markdown("---")
     col_a, col_b = st.columns(2)
