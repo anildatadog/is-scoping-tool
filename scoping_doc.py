@@ -9,27 +9,43 @@ from __future__ import annotations
 
 from datetime import date
 
-from diagnosis import Diagnosis, compute_defer_verdict
+from diagnosis import (
+    Diagnosis,
+    compute_defer_verdict,
+    compute_delivery_phases,
+    phases_total_range,
+)
 from methodologies import build_flags, build_next_steps
 
 
-# When the v1 session-estimate upper bound exceeds this, hide the specific
-# range and surface "Multi-phase, phase into smaller SOWs" instead. The number
-# above the threshold has no calibrated basis and tends to scare AEs more
-# than inform them. Cap chosen at 80 because the largest active IS engagement
-# (FCA, 80 sessions over 6 months) sits at the upper boundary of what a
-# single SOW can plausibly hold.
-_SESSION_DISPLAY_CAP = 80
+# When the v1 session-estimate upper bound exceeds this, the raw range is
+# hidden and the engagement is rendered as a phased delivery plan instead.
+# Phases are heuristic too, but structured (per-phase scope + sessions)
+# rather than a single inflated total.
+_SESSION_DISPLAY_CAP = 120
 
 
-def _commercial_line(rec: dict) -> str:
+def _commercial_block(rec: dict, answers: dict, shape: str) -> str:
+    """Return the commercial block: either a one-line summary (under cap) or
+    a multi-line phased delivery plan (over cap)."""
     if rec["sMin"] is None:
         return "Commercial: resolve sponsor blocker before estimating sessions."
+
     if rec["sMax"] > _SESSION_DISPLAY_CAP:
-        return (
-            "Commercial: Multi-phase. Phase into SOWs of ~30-60 sessions each; "
-            "programme size confirmed post-discovery. Numbers heuristic, calibration pending."
+        phases = compute_delivery_phases(answers, shape)
+        if not phases:
+            return "Commercial: Multi-phase — engagement shape doesn't define phases."
+        total_min, total_max = phases_total_range(phases)
+        header = (
+            f"Commercial: Multi-phase · {len(phases)} phases, "
+            f"~{total_min}-{total_max} sessions total (heuristic, calibration pending)."
         )
+        phase_lines = "\n".join(
+            f"  {i}. {p['name']} ({p['sessions_min']}-{p['sessions_max']} sessions)\n     {p['brief']}"
+            for i, p in enumerate(phases, start=1)
+        )
+        return f"{header}\n{phase_lines}"
+
     label = _package_label_short(rec["sMax"])
     return f"Commercial: {label} · {rec['sMin']}-{rec['sMax']} sessions (heuristic, calibration pending)."
 
@@ -117,7 +133,7 @@ def build(sf_data: dict | None, answers: dict, rec: dict, diag: Diagnosis,
         f"{ownership_lines}\n"
         f"{risk_block}"
         f"\n"
-        f"{_commercial_line(rec)}\n"
+        f"{_commercial_block(rec, answers, shape)}\n"
         f"\n"
         f"Pre-close\n"
         f"{pre_close_lines}\n"

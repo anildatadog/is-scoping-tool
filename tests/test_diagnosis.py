@@ -10,7 +10,12 @@ Schema updates:
 """
 from __future__ import annotations
 
-from diagnosis import diagnose, package_label
+from diagnosis import (
+    compute_delivery_phases,
+    diagnose,
+    package_label,
+    phases_total_range,
+)
 
 
 BA_LIKE = {
@@ -330,6 +335,72 @@ def test_diagnose_returns_full_dict_shape():
         assert t["contributed_to"], "every trigger must contribute to at least one field"
     assert isinstance(d["binding_constraints"], list)
     assert d["binding_constraints"], "binding_constraints should never be empty"
+
+
+# ──────────────────────────────────────────────────────────────────
+# Delivery phases (slice 3.8)
+# ──────────────────────────────────────────────────────────────────
+
+def test_foundation_phases_include_core_and_handover():
+    phases = compute_delivery_phases({"productScope": []}, "Foundation")
+    names = [p["name"] for p in phases]
+    assert any("Discovery" in n for n in names)
+    assert any("Core observability" in n for n in names)
+    assert any("Handover" in n for n in names)
+
+
+def test_foundation_phases_inject_addons():
+    # Core42-like profile: all four add-ons.
+    phases = compute_delivery_phases(
+        {"productScope": ["dx", "security", "ai", "workflow"]}, "Foundation"
+    )
+    names = [p["name"] for p in phases]
+    assert any("Digital Experience" in n for n in names)
+    assert any("Security telemetry" in n for n in names)
+    assert any("AI / LLM workload" in n for n in names)
+    assert any("Workflow" in n for n in names)
+    # Handover phase still at the end after add-on phases.
+    assert "Handover" in names[-1]
+
+
+def test_gap_filler_phases_include_decommission_last():
+    phases = compute_delivery_phases({"productScope": []}, "Gap-filler")
+    names = [p["name"] for p in phases]
+    assert any("Audit" in n for n in names)
+    assert any("Target-state" in n for n in names)
+    assert any("Cutover" in n for n in names)
+    assert "Decommission" in names[-1]
+
+
+def test_accelerator_phases_dont_include_handover():
+    phases = compute_delivery_phases({"productScope": ["security"]}, "Accelerator")
+    names = [p["name"] for p in phases]
+    assert any("Discovery" in n for n in names)
+    assert any("architectural review" in n.lower() for n in names)
+    # Accelerator is continuous — no handover phase.
+    assert not any("Handover" in n for n in names)
+
+
+def test_addon_phases_smaller_for_advisory_shapes():
+    # Foundation's security phase is a build (15-22); Accelerator's security
+    # phase is advisory (5-8).
+    found = compute_delivery_phases({"productScope": ["security"]}, "Foundation")
+    accel = compute_delivery_phases({"productScope": ["security"]}, "Accelerator")
+    found_sec = next(p for p in found if "Security" in p["name"])
+    accel_sec = next(p for p in accel if "Security" in p["name"])
+    assert found_sec["sessions_max"] > accel_sec["sessions_max"]
+
+
+def test_defer_returns_empty_phases():
+    assert compute_delivery_phases({"productScope": []}, "Defer") == []
+
+
+def test_phases_total_range_sums_correctly():
+    phases = [
+        {"name": "A", "brief": "a", "sessions_min": 5, "sessions_max": 10},
+        {"name": "B", "brief": "b", "sessions_min": 15, "sessions_max": 25},
+    ]
+    assert phases_total_range(phases) == (20, 35)
 
 
 def test_package_label_thresholds():
