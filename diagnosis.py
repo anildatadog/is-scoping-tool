@@ -43,7 +43,7 @@ def compute_shape(a: dict) -> _Field:
     capability    = a.get("capability")
     authority     = a.get("authority")
     team_count    = a.get("teamCount")
-    product_count = a.get("productCount")
+    scope_addons  = a.get("productScope") or []  # multi-select list, possibly empty
     sponsor       = a.get("sponsor")
     urgency       = a.get("urgency")
     compliance    = a.get("compliance")
@@ -73,10 +73,12 @@ def compute_shape(a: dict) -> _Field:
     # Wider Defer: manager-level sponsor with a small, low-pressure scope is
     # the "vanity tooling" pattern — a Director Of Something signs up but the
     # deal isn't substantial enough to maintain attention through delivery.
+    # "Narrow scope" = single team + no productScope add-ons selected.
+    scope_list = a.get("productScope") or []
     if (
         sponsor == "manager"
         and team_count == "single"
-        and product_count in {"1-2"}
+        and not scope_list
         and not forcing_function
     ):
         return {
@@ -84,7 +86,7 @@ def compute_shape(a: dict) -> _Field:
             "triggers": [
                 ("sponsor", "manager"),
                 ("teamCount", "single"),
-                ("productCount", "1-2"),
+                ("productScope", "obs-only"),
                 ("__note__", "small scope, no urgency or compliance forcing function"),
             ],
         }
@@ -118,12 +120,16 @@ def compute_shape(a: dict) -> _Field:
             ],
         }
 
+    # Standards-setter: mature customer with central authority, enterprise
+    # scale, and broad add-on scope. "Broad" = 2+ add-ons selected, i.e.
+    # genuine cross-category platform footprint, not a single observability
+    # add-on. (productCount was dropped slice 3.3; scope breadth replaces it.)
     if (
         dd_status == "live"
         and dd_quality == "good"
         and authority == "central"
         and team_count in {"enterprise", "large"}
-        and product_count in {"5-7", "suite"}
+        and len(scope_addons) >= 2
     ):
         return {
             "value": "Standards-setter",
@@ -132,7 +138,7 @@ def compute_shape(a: dict) -> _Field:
                 ("ddQuality", "good"),
                 ("authority", "central"),
                 ("teamCount", team_count or ""),
-                ("productCount", product_count or ""),
+                ("productScope", f"{len(scope_addons)}-addons"),
             ],
         }
 
@@ -244,7 +250,7 @@ def compute_dominant_constraint(a: dict) -> _Field:
     compliance    = a.get("compliance")
     team_count    = a.get("teamCount")
     authority     = a.get("authority")
-    product_count = a.get("productCount")
+    scope_addons  = a.get("productScope") or []
 
     if capability == "limited":
         return {"value": "capability gap", "triggers": [("capability", "limited")]}
@@ -270,10 +276,13 @@ def compute_dominant_constraint(a: dict) -> _Field:
             "triggers": [("teamCount", "enterprise"), ("authority", authority or "unknown")],
         }
 
-    if product_count == "suite" and team_count in {"enterprise", "large"}:
+    if len(scope_addons) >= 3 and team_count in {"enterprise", "large"}:
         return {
             "value": "scale",
-            "triggers": [("productCount", "suite"), ("teamCount", team_count or "")],
+            "triggers": [
+                ("productScope", f"{len(scope_addons)}-addons"),
+                ("teamCount", team_count or ""),
+            ],
         }
 
     return {
@@ -451,6 +460,10 @@ def compute_customer_ownership(a: dict, shape: str, posture: str) -> list[str]:
         bullets.append("Frontend / web / mobile teams named as RUM and Synthetics stakeholders; JS instrumentation + browser-side telemetry ownership agreed.")
     if _has_ai_scope(a):
         bullets.append("Data science / ML platform team named as stakeholders; LLM Obs telemetry scope and instrumentation pattern agreed before kickoff.")
+    if _has_workflow_scope(a):
+        bullets.append("Platform / DevOps team named as stakeholders for CI-CD and Workflow Automation; GitHub or GitLab admin access secured for the integration.")
+    if _is_platform_scope(a):
+        bullets.append("Named category lead per add-on area — platform-scale expansion is too broad for a single owner; appoint a category accountable per workstream before kickoff.")
 
     topology = a.get("infraTopology")
     if topology == "multi-cloud":
@@ -467,19 +480,31 @@ def compute_customer_ownership(a: dict, shape: str, posture: str) -> list[str]:
     return bullets
 
 
+def _scope_list(a: dict) -> list[str]:
+    """productScope is now a multi-select list (slice 3.3). Returns [] when
+    absent or unanswered (= observability-only)."""
+    return a.get("productScope") or []
+
+
 def _has_security_scope(a: dict) -> bool:
-    """productScope categories that bring security ops + identity stakeholders."""
-    return a.get("productScope") in {"obs-security", "platform"}
+    return "security" in _scope_list(a)
 
 
 def _has_dx_scope(a: dict) -> bool:
-    """productScope categories that bring frontend / web / mobile stakeholders."""
-    return a.get("productScope") in {"obs-dx", "platform"}
+    return "dx" in _scope_list(a)
 
 
 def _has_ai_scope(a: dict) -> bool:
-    """productScope categories that bring data science / ML platform stakeholders."""
-    return a.get("productScope") in {"obs-ai", "platform"}
+    return "ai" in _scope_list(a)
+
+
+def _has_workflow_scope(a: dict) -> bool:
+    return "workflow" in _scope_list(a)
+
+
+def _is_platform_scope(a: dict) -> bool:
+    """3+ add-ons selected = platform-scale engagement, regardless of which ones."""
+    return len(_scope_list(a)) >= 3
 
 
 # ──────────────────────────────────────────────────────────────────

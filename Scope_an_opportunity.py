@@ -312,12 +312,22 @@ def render_questionnaire() -> None:
 
     # Progress = completed questions / total. Hits 100% as soon as the last
     # question is answered, before the AE clicks "See recommendation".
-    answered_count = sum(1 for qq in rem if st.session_state.answers.get(qq["id"]))
+    # Count answered: radio questions land truthy values; multi-select
+    # questions can land an empty list (= "no add-ons" which is a valid
+    # intentional answer). Treat key-presence as "answered" for those.
+    def _answered(qq: dict) -> bool:
+        if qq.get("kind") == "multiselect":
+            return qq["id"] in st.session_state.answers
+        return bool(st.session_state.answers.get(qq["id"]))
+
+    answered_count = sum(1 for qq in rem if _answered(qq))
     st.progress(answered_count / total, text=f"{answered_count} of {total} answered")
 
     q = rem[step]
     st.subheader(q["q"])
 
+    if q.get("hint"):
+        st.caption(q["hint"])
     if q.get("sfField"):
         is_prefilled = q["id"] in st.session_state.prefilled_keys and st.session_state.answers.get(q["id"])
         badge_label = "Pre-filled" if is_prefilled else "Available in SF"
@@ -327,28 +337,47 @@ def render_questionnaire() -> None:
     option_values = [o["v"] for o in opts]
     option_labels = [o["l"] for o in opts]
 
-    current = st.session_state.answers.get(q["id"])
-    default_idx = option_values.index(current) if current in option_values else None
+    if q.get("kind") == "multiselect":
+        current_list = st.session_state.answers.get(q["id"], [])
+        default_labels = [opts[option_values.index(v)]["l"]
+                          for v in current_list if v in option_values]
+        picked_labels = st.multiselect(
+            q["q"],
+            option_labels,
+            default=default_labels,
+            key=f"multi_{q['id']}_{step}",
+            label_visibility="collapsed",
+        )
+        picked_v_list = [option_values[option_labels.index(lbl)] for lbl in picked_labels]
+        st.session_state.answers[q["id"]] = picked_v_list
 
-    picked_label = st.radio(
-        q["q"],
-        option_labels,
-        index=default_idx,
-        key=f"radio_{q['id']}_{step}",
-        label_visibility="collapsed",
-    )
-    if picked_label is not None:
-        picked_v = option_values[option_labels.index(picked_label)]
-        st.session_state.answers[q["id"]] = picked_v
+        for v in picked_v_list:
+            opt = next(o for o in opts if o["v"] == v)
+            if opt.get("s"):
+                st.caption(f"**{opt['l']}** — {opt['s']}")
+    else:
+        current = st.session_state.answers.get(q["id"])
+        default_idx = option_values.index(current) if current in option_values else None
 
-        # Show the sublabel for the chosen option.
-        sub = next((o.get("s") for o in opts if o["v"] == picked_v), "")
-        is_danger = next((o.get("danger") for o in opts if o["v"] == picked_v), False)
-        if sub:
-            if is_danger:
-                st.warning(sub)
-            else:
-                st.caption(sub)
+        picked_label = st.radio(
+            q["q"],
+            option_labels,
+            index=default_idx,
+            key=f"radio_{q['id']}_{step}",
+            label_visibility="collapsed",
+        )
+        if picked_label is not None:
+            picked_v = option_values[option_labels.index(picked_label)]
+            st.session_state.answers[q["id"]] = picked_v
+
+            # Show the sublabel for the chosen option.
+            sub = next((o.get("s") for o in opts if o["v"] == picked_v), "")
+            is_danger = next((o.get("danger") for o in opts if o["v"] == picked_v), False)
+            if sub:
+                if is_danger:
+                    st.warning(sub)
+                else:
+                    st.caption(sub)
 
     nav_back, nav_spacer, nav_next = st.columns([1, 2, 1])
     with nav_back:
@@ -361,7 +390,7 @@ def render_questionnaire() -> None:
         # filter so branching openings/closings are picked up.
         is_last = step == len(questionnaire_questions(st.session_state.answers)) - 1
         next_label = "See recommendation →" if is_last else "Next →"
-        if st.button(next_label, type="primary", disabled=(not st.session_state.answers.get(q["id"])), use_container_width=True):
+        if st.button(next_label, type="primary", disabled=(not _answered(q)), use_container_width=True):
             st.session_state.step += 1
             if st.session_state.step >= len(questionnaire_questions(st.session_state.answers)):
                 st.session_state.screen = "result"

@@ -73,31 +73,19 @@ QUESTIONS: list[dict] = [
         "show": lambda a: True,
     },
     {
-        "id": "productCount",
-        "q": "How many Datadog products are in scope for this deal?",
-        "sfField": "Opportunity › Products in Scope",
-        "opts": [
-            {"v": "1-2",   "l": "1–2 products",    "s": "e.g. Infrastructure + APM only"},
-            {"v": "3-4",   "l": "3–4 products",    "s": "e.g. Infra, APM, Logs, Synthetics"},
-            {"v": "5-7",   "l": "5–7 products",    "s": "Broad platform adoption"},
-            {"v": "suite", "l": "Full suite (8+)", "s": "Everything Datadog offers"},
-        ],
-        "show": lambda a: True,
-    },
-    {
         "id": "productScope",
-        "q": "What kind of DD scope is this?",
+        "q": "Which add-on product categories are in scope?",
+        "hint": "Standard observability (Infra, APM, Logs) is always the base. Pick zero or more add-ons. Leave empty for observability-only.",
+        "kind": "multiselect",
         "opts": [
-            {"v": "obs-core", "l": "Standard observability — Infra, APM, Logs",
-             "s": "The core three pillars. Engineering stakeholders only."},
-            {"v": "obs-dx", "l": "Observability + Digital Experience (adds RUM, Synthetics)",
+            {"v": "dx", "l": "Digital Experience (RUM, Synthetics)",
              "s": "Frontend / web / mobile teams join as stakeholders. JS instrumentation and browser-side telemetry follow a different deployment pattern."},
-            {"v": "obs-security", "l": "Observability + Cloud Security (adds CSPM, ASM, SDS, CWPP, Cloud SIEM)",
+            {"v": "security", "l": "Cloud Security (CSPM, ASM, SDS, CWPP, Cloud SIEM)",
              "s": "Security ops + identity teams join as stakeholders. Agent and IAM patterns differ from observability."},
-            {"v": "obs-ai", "l": "Observability + AI / LLM Observability",
+            {"v": "ai", "l": "AI / LLM Observability",
              "s": "Data science / ML platform team joins as stakeholders. LLM telemetry shape and instrumentation pattern are novel."},
-            {"v": "platform", "l": "Full platform expansion (three or more categories: obs + security + AI + workflow/CI-CD)",
-             "s": "Broadest stakeholder set. Long cross-category coordination cycle — phase deliberately."},
+            {"v": "workflow", "l": "Workflow / CI-CD / Bits AI",
+             "s": "Platform / DevOps team joins as stakeholders. GitHub / GitLab admin involvement; incident-flow integration."},
         ],
         "show": lambda a: True,
     },
@@ -276,28 +264,28 @@ def recommend(a: dict) -> dict:
     enterprise = a.get("teamCount") == "enterprise"
     multi      = a.get("teamCount") == "multi"
 
-    # Issue #3: single-team product bump is steeper. One team owning 8+
-    # products takes proportionally more time per product than a multi-team
-    # rollout — no parallelism, every product still needs full knowledge
-    # transfer to the same people.
-    pb_single = {"1-2": 0, "3-4": 12, "5-7": 28, "suite": 48}
-    pb_multi  = {"1-2": 0, "3-4": 8,  "5-7": 18, "suite": 28}
-    pb = (pb_single if single else pb_multi).get(a.get("productCount"), 0)
+    # productCount was dropped slice 3.3 (2026-05-27); the per-category
+    # bumps below replace it. Single-team scaling is preserved via the
+    # category overhead landing on top of an already-tighter base for
+    # single-team methodologies.
+    pb = 0
 
     cm = 1.38 if a.get("capability") == "limited" else 1.12 if a.get("capability") == "some" else 1.0
     mv = {"s": 0, "m": 12, "l": 28, "xl": 45, "unk": 10}.get(a.get("migVol"), 0)
 
-    # Issue #5: product-scope category drives a per-category overhead.
-    # Each additional category (DX / security / AI / platform-breadth) brings
+    # Issue #5: product-scope add-ons stack — each selected category brings
     # its own stakeholder set and deployment pattern, costing sessions.
-    # Replaces the previous binary securityScope bump (slice 3.2, 2026-05-27).
-    sec = {
-        "obs-core":     0,
-        "obs-dx":       5,
-        "obs-security": 12,
-        "obs-ai":       10,
-        "platform":     20,
-    }.get(a.get("productScope"), 0)
+    # Base (Standard observability) is always implied. ≥3 add-ons triggers
+    # the platform-coordination overhead. Replaces the productCount product
+    # bump (slice 3.3, 2026-05-27).
+    ps = a.get("productScope") or []
+    sec = (
+        (5  if "dx" in ps else 0)
+        + (12 if "security" in ps else 0)
+        + (10 if "ai" in ps else 0)
+        + (8  if "workflow" in ps else 0)
+        + (10 if len(ps) >= 3 else 0)
+    )
 
     # Issue #6: decentralised authority (auto) in any multi-team setup adds
     # cross-team coordination overhead that the methodology label alone
@@ -382,15 +370,17 @@ def build_flags(a: dict, key: str, s_max: int | None = None) -> list[dict]:
         f.append({"t": "wrn", "m": "Hard deadline: scope must be locked in session 1. Never compress sessions — reduce scope instead."})
     if a.get("compliance") == "yes":
         f.append({"t": "inf", "m": "Regulated industry: security and legal must be named stakeholders from session 1."})
-    ps = a.get("productScope")
-    if ps in {"obs-dx", "platform"}:
+    ps = a.get("productScope") or []
+    if "dx" in ps:
         f.append({"t": "inf", "m": "Digital Experience in scope: frontend / web / mobile teams join as stakeholders. RUM and Synthetics adoption follows a different deployment cycle from backend observability — plan instrumentation pairing sessions."})
-    if ps in {"obs-security", "platform"}:
+    if "security" in ps:
         f.append({"t": "inf", "m": "Security products in scope: security ops + identity teams join as stakeholders. CSPM/CWPP have different agent and IAM patterns from observability — plan extra cycles for those decisions."})
-    if ps in {"obs-ai", "platform"}:
+    if "ai" in ps:
         f.append({"t": "inf", "m": "AI / LLM Observability in scope: data science / ML platform team joins as stakeholders. Telemetry shape and instrumentation pattern are novel — plan extra discovery."})
-    if ps == "platform":
-        f.append({"t": "wrn", "m": "Full platform expansion: broadest stakeholder set across engineering, frontend, security, and ML. Long cross-category coordination cycle — phase deliberately and assign a category lead per area."})
+    if "workflow" in ps:
+        f.append({"t": "inf", "m": "Workflow / CI-CD / Bits AI in scope: platform / DevOps team joins as stakeholders. GitHub or GitLab admin involvement; incident-flow integration with on-call and case management."})
+    if len(ps) >= 3:
+        f.append({"t": "wrn", "m": "Platform-scale expansion (3+ add-on categories): broadest stakeholder set across engineering, frontend, security, and ML. Long cross-category coordination cycle — phase deliberately and assign a category lead per area."})
     if a.get("authority") == "auto" and a.get("teamCount") != "single":
         f.append({"t": "wrn", "m": "No central authority: adoption cannot be mandated. Exec mandate essential for scale beyond the pilot team."})
     topo = a.get("infraTopology")
@@ -440,13 +430,15 @@ def build_next_steps(a: dict, key: str) -> list[str]:
         ns.append("Confirm a named pilot team and published rollout sequence before IS kickoff.")
     if a.get("compliance") == "yes":
         ns.append("Introduce IS team to security and legal stakeholders before scoping is finalised.")
-    ps = a.get("productScope")
-    if ps in {"obs-dx", "platform"}:
+    ps = a.get("productScope") or []
+    if "dx" in ps:
         ns.append("Identify frontend / web / mobile team stakeholders. RUM and Synthetics adoption needs engineering + DX team pairing — surface to AE before the deal closes.")
-    if ps in {"obs-security", "platform"}:
+    if "security" in ps:
         ns.append("Identify security-ops and identity-team stakeholders. Security products follow different review cycles than engineering — surface that to AE before the deal closes.")
-    if ps in {"obs-ai", "platform"}:
+    if "ai" in ps:
         ns.append("Identify data science / ML platform team stakeholders. LLM Obs telemetry pattern is novel; agree the instrumentation approach before kickoff.")
+    if "workflow" in ps:
+        ns.append("Identify platform / DevOps team stakeholders for CI-CD and workflow automation. GitHub or GitLab admin access will be needed for the integration.")
     topo = a.get("infraTopology")
     if topo == "multi-cloud":
         ns.append("Identify a named cloud-platform lead per cloud before scoping is finalised.")
