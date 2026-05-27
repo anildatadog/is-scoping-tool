@@ -14,6 +14,7 @@ BA_LIKE = {
     "replacingTool": "no",
     "teamCount": "enterprise",
     "productCount": "5-7",
+    "productScope": "obs-security",  # BA: governed self-service incl. CSPM/SDS
     "sponsor": "exec",
     "authority": "central",
     "capability": "strong",
@@ -27,6 +28,7 @@ FCA_LIKE = {
     "ddQuality": "good",
     "teamCount": "large",
     "productCount": "5-7",
+    "productScope": "obs-security",  # FCA: obs + cloud security stakeholders involved
     "sponsor": "exec",
     "authority": "central",
     "capability": "strong",
@@ -41,6 +43,7 @@ MIGRATION_HEAVY = {
     "migVol": "xl",
     "teamCount": "enterprise",
     "productCount": "3-4",
+    "productScope": "obs-core",
     "sponsor": "exec",
     "authority": "central",
     "capability": "some",
@@ -54,6 +57,7 @@ SINGLE_TEAM_NEWBIE = {
     "replacingTool": "no",
     "teamCount": "multi",  # avoid the manager-sponsor + single-team Defer trigger
     "productCount": "3-4",
+    "productScope": "obs-core",
     "sponsor": "manager",
     "capability": "limited",
     "urgency": "flex",
@@ -65,23 +69,23 @@ SINGLE_TEAM_NEWBIE = {
 
 NO_SPONSOR = {
     "ddStatus": "new", "replacingTool": "no",
-    "teamCount": "multi", "productCount": "3-4",
+    "teamCount": "multi", "productCount": "3-4", "productScope": "obs-core",
     "sponsor": "none", "authority": "central",
     "capability": "some", "urgency": "flex",
-    "compliance": "no", "securityScope": "no",
+    "compliance": "no",
 }
 
 ENGINEER_NO_FORCING = {
     "ddStatus": "live", "ddQuality": "good",
-    "teamCount": "enterprise", "productCount": "3-4",
+    "teamCount": "enterprise", "productCount": "3-4", "productScope": "obs-core",
     "sponsor": "engineer", "authority": "central",
     "capability": "some", "urgency": "flex",
-    "compliance": "no", "securityScope": "no",
+    "compliance": "no",
 }
 
 ENGINEER_WITH_COMPLIANCE_OVERRIDE = {
     "ddStatus": "live", "ddQuality": "good",
-    "teamCount": "enterprise", "productCount": "3-4",
+    "teamCount": "enterprise", "productCount": "3-4", "productScope": "obs-core",
     "sponsor": "engineer", "authority": "central",
     "capability": "some", "urgency": "flex",
     "compliance": "yes",  # forcing function — overrides engineer-sponsor Defer
@@ -89,10 +93,10 @@ ENGINEER_WITH_COMPLIANCE_OVERRIDE = {
 
 VANITY_TOOLING = {
     "ddStatus": "new", "replacingTool": "no",
-    "teamCount": "single", "productCount": "1-2",
+    "teamCount": "single", "productCount": "1-2", "productScope": "obs-core",
     "sponsor": "manager",  # director-tier but small scope, no pressure
     "capability": "some", "urgency": "flex",
-    "compliance": "no", "securityScope": "no",
+    "compliance": "no",
 }
 
 
@@ -174,6 +178,45 @@ def test_manager_sponsor_small_scope_diagnoses_as_defer():
     # vanity-tooling pattern and won't sustain budget through delivery.
     d = diagnose(VANITY_TOOLING)
     assert d["shape"]["value"] == "Defer"
+
+
+def test_obs_dx_scope_adds_frontend_ownership_bullet():
+    answers = dict(FCA_LIKE)
+    answers["productScope"] = "obs-dx"
+    d = diagnose(answers)
+    assert any("frontend" in b.lower() or "rum" in b.lower()
+               for b in d["customer_ownership"])
+    # And the security bullet should NOT fire (no longer in scope).
+    assert not any("security ops and identity" in b.lower()
+                   for b in d["customer_ownership"])
+
+
+def test_obs_ai_scope_adds_ml_ownership_bullet():
+    answers = dict(FCA_LIKE)
+    answers["productScope"] = "obs-ai"
+    d = diagnose(answers)
+    assert any("data science" in b.lower() or "ml platform" in b.lower() or "llm" in b.lower()
+               for b in d["customer_ownership"])
+
+
+def test_platform_scope_fires_all_three_extra_bullets():
+    answers = dict(FCA_LIKE)
+    answers["productScope"] = "platform"
+    d = diagnose(answers)
+    # All three category-specific bullets should fire on platform scope.
+    assert any("frontend" in b.lower() or "rum" in b.lower() for b in d["customer_ownership"])
+    assert any("security ops and identity" in b.lower() for b in d["customer_ownership"])
+    assert any("data science" in b.lower() or "ml platform" in b.lower() for b in d["customer_ownership"])
+
+
+def test_obs_core_scope_fires_no_extra_category_bullets():
+    answers = dict(FCA_LIKE)
+    answers["productScope"] = "obs-core"
+    d = diagnose(answers)
+    assert not any("frontend" in b.lower() or "rum" in b.lower()
+                   for b in d["customer_ownership"])
+    assert not any("data science" in b.lower() or "ml platform" in b.lower()
+                   for b in d["customer_ownership"])
 
 
 def test_multi_cloud_topology_adds_ownership_bullet():

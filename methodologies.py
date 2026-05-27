@@ -85,6 +85,23 @@ QUESTIONS: list[dict] = [
         "show": lambda a: True,
     },
     {
+        "id": "productScope",
+        "q": "What kind of DD scope is this?",
+        "opts": [
+            {"v": "obs-core", "l": "Standard observability — Infra, APM, Logs",
+             "s": "The core three pillars. Engineering stakeholders only."},
+            {"v": "obs-dx", "l": "Observability + Digital Experience (adds RUM, Synthetics)",
+             "s": "Frontend / web / mobile teams join as stakeholders. JS instrumentation and browser-side telemetry follow a different deployment pattern."},
+            {"v": "obs-security", "l": "Observability + Cloud Security (adds CSPM, ASM, SDS, CWPP, Cloud SIEM)",
+             "s": "Security ops + identity teams join as stakeholders. Agent and IAM patterns differ from observability."},
+            {"v": "obs-ai", "l": "Observability + AI / LLM Observability",
+             "s": "Data science / ML platform team joins as stakeholders. LLM telemetry shape and instrumentation pattern are novel."},
+            {"v": "platform", "l": "Full platform expansion (three or more categories: obs + security + AI + workflow/CI-CD)",
+             "s": "Broadest stakeholder set. Long cross-category coordination cycle — phase deliberately."},
+        ],
+        "show": lambda a: True,
+    },
+    {
         "id": "infraTopology",
         "q": "What infra topology will Datadog be deployed against?",
         "opts": [
@@ -270,16 +287,17 @@ def recommend(a: dict) -> dict:
     cm = 1.38 if a.get("capability") == "limited" else 1.12 if a.get("capability") == "some" else 1.0
     mv = {"s": 0, "m": 12, "l": 28, "xl": 45, "unk": 10}.get(a.get("migVol"), 0)
 
-    # Issue #5: security products bring an extra stakeholder set (security
-    # ops, identity, sometimes compliance) and different agent/IAM patterns.
-    # Bumps every methodology when security is implicitly in scope. The
-    # explicit securityScope question was dropped 2026-05-27; we infer from
-    # productCount + compliance instead (matches diagnosis._security_in_scope).
-    sec_in_scope = (
-        a.get("productCount") in {"5-7", "suite"}
-        or (a.get("productCount") == "3-4" and a.get("compliance") == "yes")
-    )
-    sec = 12 if sec_in_scope else 0
+    # Issue #5: product-scope category drives a per-category overhead.
+    # Each additional category (DX / security / AI / platform-breadth) brings
+    # its own stakeholder set and deployment pattern, costing sessions.
+    # Replaces the previous binary securityScope bump (slice 3.2, 2026-05-27).
+    sec = {
+        "obs-core":     0,
+        "obs-dx":       5,
+        "obs-security": 12,
+        "obs-ai":       10,
+        "platform":     20,
+    }.get(a.get("productScope"), 0)
 
     # Issue #6: decentralised authority (auto) in any multi-team setup adds
     # cross-team coordination overhead that the methodology label alone
@@ -364,9 +382,15 @@ def build_flags(a: dict, key: str, s_max: int | None = None) -> list[dict]:
         f.append({"t": "wrn", "m": "Hard deadline: scope must be locked in session 1. Never compress sessions — reduce scope instead."})
     if a.get("compliance") == "yes":
         f.append({"t": "inf", "m": "Regulated industry: security and legal must be named stakeholders from session 1."})
-    if (a.get("productCount") in {"5-7", "suite"}
-            or (a.get("productCount") == "3-4" and a.get("compliance") == "yes")):
+    ps = a.get("productScope")
+    if ps in {"obs-dx", "platform"}:
+        f.append({"t": "inf", "m": "Digital Experience in scope: frontend / web / mobile teams join as stakeholders. RUM and Synthetics adoption follows a different deployment cycle from backend observability — plan instrumentation pairing sessions."})
+    if ps in {"obs-security", "platform"}:
         f.append({"t": "inf", "m": "Security products in scope: security ops + identity teams join as stakeholders. CSPM/CWPP have different agent and IAM patterns from observability — plan extra cycles for those decisions."})
+    if ps in {"obs-ai", "platform"}:
+        f.append({"t": "inf", "m": "AI / LLM Observability in scope: data science / ML platform team joins as stakeholders. Telemetry shape and instrumentation pattern are novel — plan extra discovery."})
+    if ps == "platform":
+        f.append({"t": "wrn", "m": "Full platform expansion: broadest stakeholder set across engineering, frontend, security, and ML. Long cross-category coordination cycle — phase deliberately and assign a category lead per area."})
     if a.get("authority") == "auto" and a.get("teamCount") != "single":
         f.append({"t": "wrn", "m": "No central authority: adoption cannot be mandated. Exec mandate essential for scale beyond the pilot team."})
     topo = a.get("infraTopology")
@@ -416,9 +440,13 @@ def build_next_steps(a: dict, key: str) -> list[str]:
         ns.append("Confirm a named pilot team and published rollout sequence before IS kickoff.")
     if a.get("compliance") == "yes":
         ns.append("Introduce IS team to security and legal stakeholders before scoping is finalised.")
-    if (a.get("productCount") in {"5-7", "suite"}
-            or (a.get("productCount") == "3-4" and a.get("compliance") == "yes")):
+    ps = a.get("productScope")
+    if ps in {"obs-dx", "platform"}:
+        ns.append("Identify frontend / web / mobile team stakeholders. RUM and Synthetics adoption needs engineering + DX team pairing — surface to AE before the deal closes.")
+    if ps in {"obs-security", "platform"}:
         ns.append("Identify security-ops and identity-team stakeholders. Security products follow different review cycles than engineering — surface that to AE before the deal closes.")
+    if ps in {"obs-ai", "platform"}:
+        ns.append("Identify data science / ML platform team stakeholders. LLM Obs telemetry pattern is novel; agree the instrumentation approach before kickoff.")
     topo = a.get("infraTopology")
     if topo == "multi-cloud":
         ns.append("Identify a named cloud-platform lead per cloud before scoping is finalised.")
