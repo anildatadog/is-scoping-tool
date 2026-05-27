@@ -8,6 +8,7 @@ import streamlit as st
 
 from diagnosis import diagnose, package_label
 from methodologies import build_flags, build_next_steps, recommend, visible_questions
+from prose import generate as generate_prose
 from scoping_doc import build as build_scoping_doc
 
 try:
@@ -362,6 +363,25 @@ def render_result() -> None:
     shape = diag["shape"]["value"]
     posture = diag["posture"]["value"]
     constraint = diag["dominant_constraint"]["value"]
+
+    # Prose layer — single Anthropic call, cached for ~15 min per answer set so
+    # toggling back to the result screen doesn't burn the API quota.
+    prose_cache = st.session_state.setdefault("prose_cache", {})
+    answers_key = repr(sorted(answers.items()))
+    if answers_key not in prose_cache:
+        with st.spinner("Writing diagnosis…"):
+            prose_cache[answers_key] = generate_prose(diag, answers)
+    prose = prose_cache[answers_key]
+
+    if prose:
+        st.markdown(
+            f"<div style='font-size:15px;line-height:1.55;'>"
+            f"<p><strong>Diagnosis.</strong> {prose['diagnosis_paragraph']}</p>"
+            f"<p><strong>Consequence.</strong> {prose['consequence_paragraph']}</p>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown("")
 
     st.markdown(
         f"""
