@@ -445,8 +445,12 @@ def compute_customer_ownership(a: dict, shape: str, posture: str) -> list[str]:
         bullets.append("Named decommission owner for the incumbent tool.")
     if a.get("authority") == "auto" and a.get("teamCount") != "single":
         bullets.append("Central authority delegated, or rollout will fragment across teams.")
-    if _security_in_scope(a):
+    if _has_security_scope(a):
         bullets.append("Security ops and identity teams named as stakeholders from session 1.")
+    if _has_dx_scope(a):
+        bullets.append("Frontend / web / mobile teams named as RUM and Synthetics stakeholders; JS instrumentation + browser-side telemetry ownership agreed.")
+    if _has_ai_scope(a):
+        bullets.append("Data science / ML platform team named as stakeholders; LLM Obs telemetry scope and instrumentation pattern agreed before kickoff.")
 
     topology = a.get("infraTopology")
     if topology == "multi-cloud":
@@ -463,24 +467,19 @@ def compute_customer_ownership(a: dict, shape: str, posture: str) -> list[str]:
     return bullets
 
 
-def _security_in_scope(a: dict) -> bool:
-    """Inferred securityScope. The explicit question was dropped 2026-05-27;
-    we infer from productCount + compliance:
-      - 5-7 or suite           → yes (broad scope almost always touches security)
-      - 3-4 + compliance=yes   → yes (regulated industry with mid scope usually has CSPM/SDS/SIEM)
-      - otherwise              → no
-    Fallback: honour an explicit securityScope answer if one slipped in via
-    SF prefill or test fixtures.
-    """
-    explicit = a.get("securityScope")
-    if explicit:
-        return explicit == "yes"
-    product_count = a.get("productCount")
-    if product_count in {"5-7", "suite"}:
-        return True
-    if product_count == "3-4" and a.get("compliance") == "yes":
-        return True
-    return False
+def _has_security_scope(a: dict) -> bool:
+    """productScope categories that bring security ops + identity stakeholders."""
+    return a.get("productScope") in {"obs-security", "platform"}
+
+
+def _has_dx_scope(a: dict) -> bool:
+    """productScope categories that bring frontend / web / mobile stakeholders."""
+    return a.get("productScope") in {"obs-dx", "platform"}
+
+
+def _has_ai_scope(a: dict) -> bool:
+    """productScope categories that bring data science / ML platform stakeholders."""
+    return a.get("productScope") in {"obs-ai", "platform"}
 
 
 # ──────────────────────────────────────────────────────────────────
