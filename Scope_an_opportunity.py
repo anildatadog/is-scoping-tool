@@ -474,17 +474,30 @@ def render_result() -> None:
 
         no_sess = rec["sMin"] is None
         st.subheader("Commercial")
-        st.caption("Heuristic — calibration data pending. Treat as range, not commitment.")
         if no_sess:
             st.warning("Resolve sponsor blocker before estimating sessions.")
+        elif rec["sMax"] > 80:
+            # Above ~80 the v1 sizing math produces numbers that have no
+            # calibrated basis. Surface the class + a phasing recommendation
+            # rather than a fake-precise range.
+            st.metric("Package", "Multi-phase")
+            st.caption(
+                "Phase into SOWs of ~30-60 sessions each; full programme size confirmed "
+                "post-discovery. Specific number withheld — heuristic math is unreliable "
+                "above this threshold."
+            )
         else:
             c1, c2 = st.columns(2)
             c1.metric("Package", package_label(rec["sMax"]))
             c2.metric("Session estimate", f"{rec['sMin']}–{rec['sMax']}")
+            st.caption("Heuristic — calibration data pending. Treat as range, not commitment.")
 
     st.subheader("Copy scoping summary")
     st.caption("Click the copy icon (top right of the code block) to paste into Slack, Jira, or email.")
-    st.code(build_scoping_doc(sf_data, answers, rec, diag), language=None)
+    # Pass prose into the copy-paste builder so the Slack-ready output
+    # carries the same consulting-voice paragraphs as the in-browser view.
+    prose_for_doc = None if is_defer else (prose if "prose" in locals() else None)
+    st.code(build_scoping_doc(sf_data, answers, rec, diag, prose_for_doc), language=None)
 
     st.markdown("---")
     col_a, col_b = st.columns(2)
