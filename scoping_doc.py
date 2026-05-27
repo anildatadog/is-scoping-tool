@@ -1,9 +1,14 @@
-"""Formats the copy-paste scoping summary. Direct port of buildScopingDoc from JSX."""
+"""Formats the copy-paste scoping summary for the v2 structured diagnosis output.
+
+Replaces the v1 methodology-driven summary. The session-estimate math from
+methodologies.recommend() is retained and rendered as the commercial footer.
+"""
 from __future__ import annotations
 
 from datetime import date
 
-from methodologies import METHODS, build_flags, build_next_steps
+from diagnosis import Diagnosis, package_label
+from methodologies import build_flags, build_next_steps
 
 
 _TEAM_LABEL = {
@@ -21,8 +26,7 @@ _PRODUCT_LABEL = {
 }
 
 
-def build(sf_data: dict | None, answers: dict, rec: dict) -> str:
-    m = METHODS[rec["key"]]
+def build(sf_data: dict | None, answers: dict, rec: dict, diag: Diagnosis) -> str:
     today = date.today().strftime("%d %b %Y")
     no_sess = rec["sMin"] is None
 
@@ -45,10 +49,30 @@ def build(sf_data: dict | None, answers: dict, rec: dict) -> str:
     account_name = (sf_data or {}).get("accountName") or "[Account Name]"
     opp_name = (sf_data or {}).get("oppName") or "[not specified]"
 
+    shape = diag["shape"]["value"]
+    posture = diag["posture"]["value"]
+    constraint = diag["dominant_constraint"]["value"]
+
+    trigger_lines = "\n".join(
+        f"  {t['signal']:<15} = {t['value']:<10} → {', '.join(t['contributed_to'])}"
+        for t in diag["triggers"]
+    ) or "  (no triggers fired — fallback diagnosis)"
+
+    ownership_lines = "\n".join(f"  • {b}" for b in diag["customer_ownership"]) \
+        or "  (no specific ownership bullets — review manually)"
+
     if no_sess:
-        sessions_line = "Session estimate: resolve sponsor blocker first"
+        commercial_block = (
+            "\nCOMMERCIAL · heuristic\n"
+            "  Status: resolve sponsor blocker before estimating sessions\n"
+        )
     else:
-        sessions_line = f"Estimated sessions: {rec['sMin']}–{rec['sMax']}"
+        commercial_block = (
+            f"\nCOMMERCIAL · heuristic, calibration data pending\n"
+            f"  Package:           {package_label(rec['sMax'])}\n"
+            f"  Session estimate:  {rec['sMin']}–{rec['sMax']}\n"
+            f"  Caveat:            estimates remain heuristic until calibration data accrues\n"
+        )
 
     risk_block = ""
     if flags:
@@ -65,19 +89,21 @@ def build(sf_data: dict | None, answers: dict, rec: dict) -> str:
         f"Opportunity:  {opp_name}\n"
         f"Date:         {today}\n"
         f"\n"
-        f"RECOMMENDED METHODOLOGY\n"
-        f"{m['name']}\n"
-        f"{sessions_line}\n"
+        f"DIAGNOSIS\n"
+        f"  Shape:                {shape}\n"
+        f"  Posture:              {posture}\n"
+        f"  Dominant constraint:  {constraint}\n"
+        f"\n"
+        f"  Triggers\n"
+        f"{trigger_lines}\n"
         f"\n"
         f"CONTEXT\n"
-        f"{context_line}\n"
+        f"  {context_line}\n"
         f"\n"
-        f"PHASE BREAKDOWN\n"
-        f"  Discovery: {m['phases']['discover']}\n"
-        f"  Design:    {m['phases']['design']}\n"
-        f"  Build:     {m['phases']['build']}\n"
-        f"  Launch:    {m['phases']['launch']}\n"
+        f"CUSTOMER OWNERSHIP\n"
+        f"{ownership_lines}\n"
         f"{risk_block}"
+        f"{commercial_block}"
         f"\nPRE-CLOSE REQUIREMENTS\n"
         f"{pre_close_lines}\n"
         f"{rule}"

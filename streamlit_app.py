@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from methodologies import METHODS, build_flags, build_next_steps, recommend, visible_questions
+from diagnosis import diagnose, package_label
+from methodologies import build_flags, build_next_steps, recommend, visible_questions
 from scoping_doc import build as build_scoping_doc
 
 try:
@@ -352,37 +353,41 @@ def render_result() -> None:
     answers = st.session_state.answers
     sf_data = st.session_state.sf_data
     rec = recommend(answers)
-    meth = METHODS[rec["key"]]
+    diag = diagnose(answers)
     no_sess = rec["sMin"] is None
 
-    sub = "Resolve sponsor blocker before estimating sessions" if no_sess \
-        else f"Estimated sessions: {rec['sMin']}–{rec['sMax']}"
     account = (sf_data or {}).get("accountName")
     sub_tail = f" — {account}" if account else ""
 
+    shape = diag["shape"]["value"]
+    posture = diag["posture"]["value"]
+    constraint = diag["dominant_constraint"]["value"]
+
     st.markdown(
         f"""
-        <div style="background:{meth['color']};padding:18px 20px;border-radius:8px;color:#fff;">
-            <div style="font-size:10px;letter-spacing:.05em;text-transform:uppercase;opacity:.75;">
-                Recommended IS methodology
+        <div style="background:#1c1c1c;padding:20px 22px;border-radius:8px;color:#fff;">
+            <div style="font-size:10px;letter-spacing:.05em;text-transform:uppercase;opacity:.6;">
+                Diagnosis{sub_tail}
             </div>
-            <div style="font-size:22px;font-weight:500;margin-top:4px;">{meth['name']}</div>
-            <div style="font-size:13px;opacity:.85;margin-top:4px;">{sub}{sub_tail}</div>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 18px;margin-top:10px;font-size:14px;">
+                <div style="opacity:.6;">Shape</div><div style="font-weight:500;">{shape}</div>
+                <div style="opacity:.6;">Posture</div><div style="font-weight:500;">{posture}</div>
+                <div style="opacity:.6;">Dominant constraint</div><div style="font-weight:500;">{constraint}</div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("")
-    st.write(meth["desc"])
+    if diag["triggers"]:
+        with st.expander("Triggers — why this diagnosis fired", expanded=False):
+            for t in diag["triggers"]:
+                contribs = ", ".join(t["contributed_to"])
+                st.markdown(f"- `{t['signal']} = {t['value']}` → {contribs}")
 
-    if not no_sess:
-        st.subheader("Phase breakdown")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Discover", meth["phases"]["discover"])
-        c2.metric("Design",   meth["phases"]["design"])
-        c3.metric("Build",    meth["phases"]["build"])
-        c4.metric("Launch",   meth["phases"]["launch"])
+    st.subheader("Customer ownership")
+    for bullet in diag["customer_ownership"]:
+        st.markdown(f"- {bullet}")
 
     flags = build_flags(answers, rec["key"], rec.get("sMax"))
     if flags:
@@ -394,9 +399,18 @@ def render_result() -> None:
     for i, n in enumerate(build_next_steps(answers, rec["key"]), start=1):
         st.markdown(f"**{i}.** {n}")
 
+    st.subheader("Commercial")
+    st.caption("Heuristic — calibration data pending. Treat as range, not commitment.")
+    if no_sess:
+        st.warning("Resolve sponsor blocker before estimating sessions.")
+    else:
+        c1, c2 = st.columns(2)
+        c1.metric("Package", package_label(rec["sMax"]))
+        c2.metric("Session estimate", f"{rec['sMin']}–{rec['sMax']}")
+
     st.subheader("Copy scoping summary")
     st.caption("Click the copy icon (top right of the code block) to paste into Slack, Jira, or email.")
-    st.code(build_scoping_doc(sf_data, answers, rec), language=None)
+    st.code(build_scoping_doc(sf_data, answers, rec, diag), language=None)
 
     st.markdown("---")
     col_a, col_b = st.columns(2)
