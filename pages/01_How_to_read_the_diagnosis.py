@@ -75,7 +75,10 @@ with tab_foundation:
         title="🏗️ Foundation",
         tagline="Building Datadog from zero with the right operating model baked in from the start.",
         say='"Not just installing Datadog. Putting the operating model around it that lets it scale."',
-        sessions="Discovery → architecture → pattern build → handover. **Architecture-heavy.**",
+        sessions=(
+            "Discovery → architecture → pattern build → handover. **Architecture-heavy.** "
+            "_Motion varies: **IS-delivered** when capability is limited (IS pairs hands-on); **Customer-delivered** when the platform team builds from IS-designed patterns; **Partner-delivered** if delivery is outsourced._"
+        ),
         commits=[
             "Named engineering capacity for the duration",
             "Platform team to inherit the deployed pattern",
@@ -90,28 +93,31 @@ with tab_foundation:
 with tab_accel:
     _tab_section(
         title="🚀 Accelerator",
-        tagline="Mature customer with the muscle to execute. They want IS judgement at decision time, not delivery labour.",
-        say='"Datadog is installed and working. We accelerate your architectural decisions so you move faster than your change-management cadence would otherwise allow."',
-        sessions="Proposals → written assessments → design reviews → walkthroughs. **Advisory-light, customer-paced.**",
+        tagline="Mature customer with the muscle to execute. They want forward architectural judgement, at their pace, on a continuous cadence.",
+        say='"You don\'t have a broken thing to fix. What you have is forward architectural decisions you want senior judgement on — at your pace, on a continuous cadence with no defined endpoint."',
+        sessions=(
+            "Proposals → written assessments → design reviews → walkthroughs. **Forward, customer-paced, no defined endpoint.** "
+            "_Motion: **Customer-delivered** by default — customer team executes, IS architects/reviews._"
+        ),
         commits=[
             "Execution across every workstream (IS does not own the rollout)",
             "Workstream prioritisation (IS does not own the backlog)",
             "**Exec-level steering** so IS judgement stays visible — sessions consumed is a poor proxy for impact, surface architectural calls at exec cadence",
         ],
         not_this_if=(
-            "Wants the pattern *published* across other teams as a blueprint → **Standards-setter**. "
-            "Existing deployment has broken governance, not just architectural choices to make → **Gap-filler**."
+            "Has a specific corrective scope (broken governance OR a migration from an incumbent) → **Gap-filler**. "
+            "Wants the pattern *published* across other teams as a blueprint → **Standards-setter**."
         ),
     )
 
 with tab_gap:
     _tab_section(
         title="🔧 Gap-filler",
-        tagline="Something is broken or they're migrating. IS designs the target state and validates the cutover.",
-        say='"We design the target state and validate the work. Hands-on migration is your team or a delivery partner — IS doesn\'t scale to that."',
+        tagline="Specific corrective scope — broken governance or a migration. Lifecycle-bounded with parity sign-off as a gate.",
+        say='"You have a specific problem to fix — broken governance or a migration. IS designs the target state, gates the cutover with parity sign-off, and the engagement has a defined end. Hands-on goes to your team or a delivery partner."',
         sessions=(
-            "Audit → target-state design → cutover validation → decommission. **Phased per workstream.** "
-            "_Note: high-volume migration (xl) shifts posture to **IS-led** — IS architects the target state, partner or customer team does the hands-on cutover. IS does not take heavy HOK at this volume._"
+            "Audit → target-state design → cutover validation → decommission. **Phased per workstream, defined endpoint.** "
+            "_Motion: **Partner-delivered** for high-volume migration (xl) — IS architects, partner cuts over; **IS-delivered** when the customer can't shoulder a moderate migration alone; **Customer-delivered** for strong-capability remediations._"
         ),
         commits=[
             "Named decommission owner + audit-trail sign-off",
@@ -120,18 +126,21 @@ with tab_gap:
         ],
         not_this_if=(
             "Governance hasn't broken and they're building from zero → **Foundation**. "
-            "Existing deployment is healthy and they want architectural acceleration → **Accelerator**."
+            "Existing deployment is healthy and they want forward architectural acceleration → **Accelerator**."
         ),
     )
 
 with tab_std:
     _tab_section(
         title="📐 Standards-setter",
-        tagline="Mature customer wants a replicable blueprint. IS designs the pattern; customer replicates.",
-        say='"We build the reference and the pilot. Your platform team replicates it to the rest of the org. No per-team rollouts from IS."',
-        sessions="Pattern design → pilot build → documentation → handover. **Tight, no per-team scaling.**",
+        tagline="Mature customer wants a replicable blueprint. IS designs the pattern; customer or partner replicates across teams.",
+        say='"We build the reference and the pilot. Your platform team or a delivery partner replicates it to the rest of the org. IS doesn\'t run per-team rollouts."',
+        sessions=(
+            "Pattern design → pilot build → documentation → handover. **Tight scope, no per-team scaling.** "
+            "_Motion varies: **Customer-delivered** when the customer's platform team replicates the pattern; **Partner-delivered** when a delivery partner does the per-team rollouts._"
+        ),
         commits=[
-            "Replication ownership across remaining teams",
+            "Replication ownership across remaining teams (customer team or named partner)",
             "Internal training and pattern-divergence governance",
             "**Central authority** to govern divergence — without a broker function the pattern won't land; push back before scoping if absent",
         ],
@@ -171,33 +180,32 @@ with tab_defer:
 # Definitions appendix — collapsed by default
 # ──────────────────────────────────────────────────────────────────
 
-with st.expander("📖 Vocabulary — postures, constraints, triggers, ownership"):
+with st.expander("📖 Vocabulary — motions, constraints, triggers, ownership"):
     st.markdown(
         """
-**Posture** describes what IS actually does — the customer-IS dynamic. Derived from capability + scope + urgency.
+**Motion** — who actually does the hands-on work. Derived from capability + scope + urgency. The motion is what you tell the customer about *who's running the work*; the shape is what you tell them about *what kind of engagement it is*.
 
-| Posture | What it means |
+| Motion | What it means |
 |---|---|
-| 🎯 IS-led | IS owns architecture decisions and drives the engagement |
-| 🧭 IS-advisory | IS reviews and proposes; customer executes |
-| 🔨 IS-executes | IS does the hands-on work alongside the customer (moderate migrations only — high-volume goes IS-led + partner) |
-| 📋 IS-as-pattern-source | IS builds the first instance; customer replicates |
+| 🛠️ IS-delivered | IS does the hands-on work alongside the customer. High-touch — used when capability is limited, moderate migration, or hard deadline the customer can't shoulder. |
+| 🧑‍💼 Customer-delivered | Customer team does the work; IS architects, reviews, validates. The mature-customer default. |
+| 🤝 Partner-delivered | Delivery partner does the work; IS architects and oversees. Used when volume exceeds customer capacity (xl migration) or when scope is broad and partner has the right skills. |
 
-**Dominant constraint** — priority order, only one wins:
+**Binding constraints** — all that apply, ordered by priority (highest-priority listed first). Multiple can be binding simultaneously; the engagement has to honour all of them.
 
-| # | Constraint | Wins when |
+| # | Constraint | Binds when |
 |---|---|---|
 | 1 | capability gap | `capability = limited` — dominates everything; knowledge transfer is the engagement |
 | 2 | deadline | `urgency = hard` — scope negotiates down, sessions never compress |
 | 3 | governance debt | `ddQuality = messy` — audit + remediation come first |
 | 4 | multi-team | `teamCount = large` — fragmentation is the binding cost |
-| 5 | regulation | `compliance = yes` — only if nothing higher fires |
+| 5 | regulation | `compliance = yes` — frequently binds alongside multi-team or scale |
 | 6 | multi-team (soft) | `teamCount = enterprise` and `authority ≠ central` |
 | 7 | scale | 3+ scope add-ons selected with `teamCount` enterprise/large |
 
 **Triggers** — every diagnosis shows which inputs fired it. Override the answer if a trigger looks wrong; the rule engine is deterministic.
 
-**Customer ownership** bullets — composed from `(shape, posture)` plus conditional bullets driven by specific inputs (compliance, replacingTool, infraTopology, productScope). Use them in the pre-close conversation with the customer.
+**Customer ownership** bullets — composed from `(shape, motion)` plus conditional bullets driven by specific inputs (compliance, replacingTool, infraTopology, productScope). Use them in the pre-close conversation with the customer.
 
 **Commercial** — session estimates are the v1 sizing math. Above ~80 sessions the number is withheld and the engagement is flagged Multi-phase. Heuristic; calibration data pending.
 """

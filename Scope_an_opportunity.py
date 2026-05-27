@@ -228,12 +228,14 @@ def render_review() -> None:
     st.caption("These values came from Salesforce. Edit any that look wrong, then continue.")
 
     # Only show questions whose answer is already set AND are visible per branching.
-    # The radio for each lets the AE override before the rest of the questionnaire runs.
-    visible_set = {q["id"] for q in visible_questions(answers)}
-    answered_visible = [
-        q for q in visible_questions(answers)
-        if q["id"] in visible_set and answers.get(q["id"])
-    ]
+    # Multi-select questions count as "answered" by key-presence even if the
+    # value is an empty list (= valid intentional "obs-only" answer).
+    def _is_answered(qq: dict) -> bool:
+        if qq.get("kind") == "multiselect":
+            return qq["id"] in answers
+        return bool(answers.get(qq["id"]))
+
+    answered_visible = [q for q in visible_questions(answers) if _is_answered(q)]
 
     if not answered_visible:
         # Defensive: shouldn't happen because we only land here when prefill is non-empty.
@@ -247,20 +249,36 @@ def render_review() -> None:
         opts = q["opts"]
         option_values = [o["v"] for o in opts]
         option_labels = [o["l"] for o in opts]
-        current = answers.get(q["id"])
-        default_idx = option_values.index(current) if current in option_values else 0
-
         prefix = "⚡ " if q["id"] in st.session_state.prefilled_keys else ""
-        picked_label = st.radio(
-            f"{prefix}{q['q']}",
-            option_labels,
-            index=default_idx,
-            key=f"review_radio_{q['id']}",
-        )
-        if picked_label is not None:
-            picked_v = option_values[option_labels.index(picked_label)]
-            if answers.get(q["id"]) != picked_v:
-                answers[q["id"]] = picked_v
+
+        if q.get("kind") == "multiselect":
+            current_list = answers.get(q["id"], [])
+            default_labels = [
+                opts[option_values.index(v)]["l"]
+                for v in current_list if v in option_values
+            ]
+            picked_labels = st.multiselect(
+                f"{prefix}{q['q']}",
+                option_labels,
+                default=default_labels,
+                key=f"review_multi_{q['id']}",
+            )
+            answers[q["id"]] = [
+                option_values[option_labels.index(lbl)] for lbl in picked_labels
+            ]
+        else:
+            current = answers.get(q["id"])
+            default_idx = option_values.index(current) if current in option_values else 0
+            picked_label = st.radio(
+                f"{prefix}{q['q']}",
+                option_labels,
+                index=default_idx,
+                key=f"review_radio_{q['id']}",
+            )
+            if picked_label is not None:
+                picked_v = option_values[option_labels.index(picked_label)]
+                if answers.get(q["id"]) != picked_v:
+                    answers[q["id"]] = picked_v
 
     st.markdown("---")
     col_a, col_b = st.columns([1, 1])
@@ -453,18 +471,18 @@ def render_result() -> None:
             )
             st.markdown("")
 
-    # Structured card. For Defer, show only the verdict label; the posture /
-    # dominant-constraint fields aren't meaningful for a "this isn't IS"
+    # Structured card. For Defer, show only the verdict label; motion /
+    # binding-constraints fields aren't meaningful for a "this isn't IS"
     # output and would just confuse the reader.
     if is_defer:
         card_rows = '<div style="opacity:.6;">Verdict</div><div style="font-weight:500;">Defer — not an IS engagement (yet)</div>'
     else:
-        posture = diag["posture"]["value"]
-        constraint = diag["dominant_constraint"]["value"]
+        motion = diag["motion"]["value"]
+        constraints_str = " · ".join(c["value"] for c in diag["binding_constraints"])
         card_rows = (
             f'<div style="opacity:.6;">Shape</div><div style="font-weight:500;">{shape}</div>'
-            f'<div style="opacity:.6;">Posture</div><div style="font-weight:500;">{posture}</div>'
-            f'<div style="opacity:.6;">Dominant constraint</div><div style="font-weight:500;">{constraint}</div>'
+            f'<div style="opacity:.6;">Motion</div><div style="font-weight:500;">{motion}</div>'
+            f'<div style="opacity:.6;">Binding constraints</div><div style="font-weight:500;">{constraints_str}</div>'
         )
     st.markdown(
         f"""
