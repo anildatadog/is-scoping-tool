@@ -53,6 +53,19 @@ def _scope_list(a: dict) -> list[str]:
     return a.get("productScope") or []
 
 
+def _topology_list(a: dict) -> list[str]:
+    """infraTopology is a multi-select list (slice 3.10). Returns [] when
+    absent (= single-cloud baseline). Back-compat coercion: any old single
+    string value still in session state — "single-cloud" → []; anything
+    else → single-item list."""
+    val = a.get("infraTopology")
+    if val is None:
+        return []
+    if isinstance(val, str):
+        return [] if val == "single-cloud" else [val]
+    return val
+
+
 def _has_security_scope(a: dict) -> bool:
     return "security" in _scope_list(a)
 
@@ -521,16 +534,16 @@ def compute_customer_ownership(a: dict, shape: str, motion: str) -> list[str]:
     if _is_platform_scope(a):
         bullets.append("Named category lead per add-on area — platform-scale expansion is too broad for a single owner; appoint a category accountable per workstream before kickoff.")
 
-    topology = a.get("infraTopology")
-    if topology == "multi-cloud":
+    topos = _topology_list(a)
+    if "multi-cloud" in topos:
         bullets.append("Named cloud-platform lead per cloud — IAM and integration accounts owned per provider.")
-    elif topology == "sovereign":
+    if "sovereign" in topos:
         bullets.append("Data residency + DD site selection sign-off before any agent install.")
-    elif topology == "gpu-aas":
+    if "gpu-aas" in topos:
         bullets.append("AI/HPC telemetry scope agreed — LLM Obs surface, GPU metrics, custom workload identification.")
-    elif topology == "byoc":
+    if "byoc" in topos:
         bullets.append("Customer owns install + version-upgrade cadence; agent rollout cadence aligned to their release cycle.")
-    elif topology == "hybrid":
+    if "hybrid" in topos:
         bullets.append("Dual-deployment plumbing — cloud agent + on-prem agent or bridge — and the bridge owner named.")
 
     return bullets

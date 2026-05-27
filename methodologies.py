@@ -5,6 +5,8 @@ to the JSX so the two stay verifiably equivalent.
 """
 from __future__ import annotations
 
+from diagnosis import _topology_list
+
 
 QUESTIONS: list[dict] = [
     {
@@ -91,10 +93,10 @@ QUESTIONS: list[dict] = [
     },
     {
         "id": "infraTopology",
-        "q": "What infra topology will Datadog be deployed against?",
+        "q": "Which infra topologies apply?",
+        "hint": "Single public cloud (AWS, Azure, GCP) is the baseline — pick any topologies that compound on top. Multiple can apply (e.g. multi-cloud + sovereign, or hybrid + GPU-as-a-Service). Leave empty for single-cloud only.",
+        "kind": "multiselect",
         "opts": [
-            {"v": "single-cloud", "l": "Single public cloud (AWS, Azure, or GCP)",
-             "s": "Baseline. One cloud-platform integration, one IAM model, standard agent footprint."},
             {"v": "multi-cloud", "l": "Multi-cloud — two or more public clouds in active use",
              "s": "Per-cloud integration accounts and IAM strategies; cross-cloud tag normalisation surface."},
             {"v": "sovereign", "l": "Sovereign / regulated cloud (gov cloud, in-country residency)",
@@ -291,19 +293,18 @@ def recommend(a: dict) -> dict:
     # doesn't capture.
     auto_overhead = 8 if a.get("authority") == "auto" and not single else 0
 
-    # Issue #7: infra topology adds engagement complexity orthogonal to the
-    # methodology label. Each topology has its own integration / agent / IAM
-    # pattern that needs sessions to design and validate. Bumps are heuristic,
-    # uncalibrated — they only influence the v1 math, and the display layer
-    # caps the output above ~80 sessions regardless.
-    topo_bump = {
-        "single-cloud": 0,
-        "multi-cloud":  12,
-        "sovereign":     8,
-        "gpu-aas":      15,
-        "byoc":         20,
-        "hybrid":       10,
-    }.get(a.get("infraTopology"), 0)
+    # Issue #7: infra topology is a multi-select (slice 3.10). Each selected
+    # topology stacks its own bump for engagement complexity. Single public
+    # cloud is the baseline (empty selection = 0 bump). Bumps are heuristic;
+    # the display cap absorbs the math above ~120 sessions anyway.
+    _topo_bump_per = {
+        "multi-cloud": 12,
+        "sovereign":    8,
+        "gpu-aas":     15,
+        "byoc":        20,
+        "hybrid":      10,
+    }
+    topo_bump = sum(_topo_bump_per.get(t, 0) for t in _topology_list(a))
 
     def adj(mn: int, mx: int, ex: int = 0) -> dict:
         bump = pb + ex + sec + auto_overhead + topo_bump
@@ -382,16 +383,16 @@ def build_flags(a: dict, key: str, s_max: int | None = None) -> list[dict]:
         f.append({"t": "wrn", "m": "Platform-scale expansion (3+ add-on categories): broadest stakeholder set across engineering, frontend, security, and ML. Long cross-category coordination cycle — phase deliberately and assign a category lead per area."})
     if a.get("authority") == "auto" and a.get("teamCount") != "single":
         f.append({"t": "wrn", "m": "No central authority: adoption cannot be mandated. Exec mandate essential for scale beyond the pilot team."})
-    topo = a.get("infraTopology")
-    if topo == "multi-cloud":
+    topos = _topology_list(a)
+    if "multi-cloud" in topos:
         f.append({"t": "inf", "m": "Multi-cloud: separate integration accounts + IAM per provider. Plan extra cycles for cross-cloud tag normalisation."})
-    elif topo == "sovereign":
+    if "sovereign" in topos:
         f.append({"t": "wrn", "m": "Sovereign cloud: confirm DD site availability and customer data-residency requirements upfront — some products are not available in every sovereign region."})
-    elif topo == "gpu-aas":
+    if "gpu-aas" in topos:
         f.append({"t": "inf", "m": "GPU/HPC fleet: LLM Obs and AI workload telemetry likely in scope. Novel telemetry shapes — plan extra discovery cycles."})
-    elif topo == "byoc":
+    if "byoc" in topos:
         f.append({"t": "wrn", "m": "BYOC: customer owns install + upgrade lifecycle. Confirm version-control ownership and upgrade cadence before kickoff."})
-    elif topo == "hybrid":
+    if "hybrid" in topos:
         f.append({"t": "inf", "m": "Hybrid: dual-deployment plumbing — agent + on-prem bridge — needs a named owner for the bridge."})
 
     if a.get("migVol") == "unk":
@@ -438,12 +439,12 @@ def build_next_steps(a: dict, key: str) -> list[str]:
         ns.append("Identify data science / ML platform team stakeholders. LLM Obs telemetry pattern is novel; agree the instrumentation approach before kickoff.")
     if "workflow" in ps:
         ns.append("Identify platform / DevOps team stakeholders for CI-CD and workflow automation. GitHub or GitLab admin access will be needed for the integration.")
-    topo = a.get("infraTopology")
-    if topo == "multi-cloud":
+    topos = _topology_list(a)
+    if "multi-cloud" in topos:
         ns.append("Identify a named cloud-platform lead per cloud before scoping is finalised.")
-    elif topo == "sovereign":
+    if "sovereign" in topos:
         ns.append("Verify DD site availability and customer data-residency requirements before contracting.")
-    elif topo == "byoc":
+    if "byoc" in topos:
         ns.append("Confirm BYOC version-control and upgrade-cadence ownership at the customer.")
     if a.get("migVol") == "unk":
         ns.append("Schedule a tool audit session before final pricing — estimate will change significantly.")

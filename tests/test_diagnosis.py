@@ -28,7 +28,7 @@ BA_LIKE = {
     "capability": "strong",
     "urgency": "flex",
     "compliance": "yes",
-    "infraTopology": "single-cloud",
+    "infraTopology": [],
 }
 
 FCA_LIKE = {
@@ -41,7 +41,7 @@ FCA_LIKE = {
     "capability": "strong",
     "urgency": "flex",
     "compliance": "yes",
-    "infraTopology": "single-cloud",
+    "infraTopology": [],
 }
 
 MIGRATION_HEAVY = {
@@ -55,7 +55,7 @@ MIGRATION_HEAVY = {
     "capability": "some",
     "urgency": "hard",
     "compliance": "no",
-    "infraTopology": "single-cloud",
+    "infraTopology": [],
 }
 
 SINGLE_TEAM_NEWBIE = {
@@ -67,7 +67,7 @@ SINGLE_TEAM_NEWBIE = {
     "capability": "limited",
     "urgency": "flex",
     "compliance": "no",
-    "infraTopology": "single-cloud",
+    "infraTopology": [],
 }
 
 # Standards-setter precedence case (slice 3.7 fix): centrally-governed broad-scope
@@ -82,7 +82,7 @@ STANDARDS_SETTER_LIKE = {
     "capability": "strong",
     "urgency": "flex",
     "compliance": "no",
-    "infraTopology": "single-cloud",
+    "infraTopology": [],
 }
 
 # Defer cases — verdict, not engagement.
@@ -277,7 +277,7 @@ def test_obs_only_no_addons_fires_no_extra_category_bullets():
 
 def test_multi_cloud_topology_adds_ownership_bullet():
     answers = dict(FCA_LIKE)
-    answers["infraTopology"] = "multi-cloud"
+    answers["infraTopology"] = ["multi-cloud"]
     d = diagnose(answers)
     assert any("cloud-platform lead per cloud" in b.lower() or "cloud-platform" in b.lower()
                for b in d["customer_ownership"])
@@ -285,10 +285,29 @@ def test_multi_cloud_topology_adds_ownership_bullet():
 
 def test_byoc_topology_adds_ownership_bullet():
     answers = dict(FCA_LIKE)
-    answers["infraTopology"] = "byoc"
+    answers["infraTopology"] = ["byoc"]
     d = diagnose(answers)
     assert any("install" in b.lower() and "upgrade" in b.lower()
                for b in d["customer_ownership"])
+
+
+def test_multiple_topologies_fire_all_bullets():
+    """Slice 3.10: a sovereign + GPU-aas customer (e.g. regulated AI workload)
+    should surface BOTH topology bullets."""
+    answers = dict(FCA_LIKE)
+    answers["infraTopology"] = ["sovereign", "gpu-aas"]
+    d = diagnose(answers)
+    assert any("residency" in b.lower() for b in d["customer_ownership"])
+    assert any("gpu" in b.lower() or "hpc" in b.lower() for b in d["customer_ownership"])
+
+
+def test_empty_topology_list_fires_no_bullets():
+    answers = dict(FCA_LIKE)
+    answers["infraTopology"] = []  # single-cloud baseline
+    d = diagnose(answers)
+    assert not any("residency" in b.lower() for b in d["customer_ownership"])
+    assert not any("multi-cloud" in b.lower() or "cloud-platform lead" in b.lower()
+                   for b in d["customer_ownership"])
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -312,7 +331,7 @@ def test_single_binding_constraint_when_only_one_fires():
         "teamCount": "multi", "productScope": [],
         "sponsor": "exec", "authority": "central",
         "capability": "some", "urgency": "hard",  # deadline fires
-        "compliance": "no", "infraTopology": "single-cloud",
+        "compliance": "no", "infraTopology": [],
     }
     d = diagnose(answers)
     values = [c["value"] for c in d["binding_constraints"]]
