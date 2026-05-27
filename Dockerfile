@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir --upgrade -r requirements.txt \
  && python -c "import streamlit; print('streamlit', streamlit.__version__)" \
  && python -c "import streamlit.web.server.starlette.starlette_auth_routes as m; print('streamlit auth routes import OK')"
 
-COPY methodologies.py scoping_doc.py snowflake_lookup.py streamlit_app.py docker-entrypoint.sh ./
+COPY diagnosis.py methodologies.py scoping_doc.py snowflake_lookup.py streamlit_app.py docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
 # Cloud Run injects $PORT (default 8080). The entrypoint generates
