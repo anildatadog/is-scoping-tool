@@ -106,7 +106,7 @@ st.markdown(
 
 st.caption(
     "Cells in **orange** are the most common shape × posture combinations. "
-    "Other cells are valid but should make you pause and confirm with the AE."
+    "Other cells are valid but rare — re-check your inputs if you land in one."
 )
 
 st.divider()
@@ -309,8 +309,8 @@ st.markdown(
     """
 The bullets list what the customer must own for the engagement to land. Composed from the `(shape, posture)` pair plus conditional bullets driven by specific inputs (compliance stakeholders, decommission owners, security ops, authority delegation).
 
-> **Use the bullets as the pre-close conversation with the AE.**
-> *"These are things the customer has to commit to; otherwise the engagement will stall."*
+> **Use the bullets in the pre-close conversation with the customer.**
+> *"These are things you have to commit to; otherwise the engagement will stall."*
 > If they can't commit, that's information about the deal, not just the engagement.
 """
 )
