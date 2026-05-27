@@ -359,7 +359,7 @@ def build_flags(a: dict, key: str, s_max: int | None = None) -> list[dict]:
     f: list[dict] = []
     if key == "political":
         f.append({"t": "blk", "m": "No internal champion identified. IS cannot be sold until a sponsor is confirmed."})
-        f.append({"t": "wrn", "m": "AE action: identify who feels the monitoring pain most. Build the business case with them before selling IS sessions."})
+        f.append({"t": "wrn", "m": "Identify who feels the monitoring pain most. Build the business case with them before selling IS sessions."})
         return f
 
     if a.get("sponsor") == "engineer":
@@ -432,9 +432,9 @@ def build_next_steps(a: dict, key: str) -> list[str]:
         ns.append("Introduce IS team to security and legal stakeholders before scoping is finalised.")
     ps = a.get("productScope") or []
     if "dx" in ps:
-        ns.append("Identify frontend / web / mobile team stakeholders. RUM and Synthetics adoption needs engineering + DX team pairing — surface to AE before the deal closes.")
+        ns.append("Identify frontend / web / mobile team stakeholders. RUM and Synthetics adoption needs engineering + DX team pairing — factor into the close timeline.")
     if "security" in ps:
-        ns.append("Identify security-ops and identity-team stakeholders. Security products follow different review cycles than engineering — surface that to AE before the deal closes.")
+        ns.append("Identify security-ops and identity-team stakeholders. Security products follow different review cycles than engineering — factor that into the close timeline.")
     if "ai" in ps:
         ns.append("Identify data science / ML platform team stakeholders. LLM Obs telemetry pattern is novel; agree the instrumentation approach before kickoff.")
     if "workflow" in ps:
