@@ -70,8 +70,28 @@ def reset_to_search() -> None:
 
 
 def remaining_questions(answers: dict) -> list[dict]:
-    """Visible questions (per branching) that the user still needs to answer."""
+    """Visible questions (per branching) that the user still needs to answer.
+
+    Used for the review/advance-from-review logic (asking 'is there work left?')
+    and for the 'remaining N' counter on the review screen — i.e. anywhere we
+    need a count of UNANSWERED questions.
+    """
     return [q for q in visible_questions(answers) if not answers.get(q["id"])]
+
+
+def questionnaire_questions(answers: dict) -> list[dict]:
+    """Visible questions that belong on the QUESTIONNAIRE screen — every
+    visible question that was NOT prefilled from Salesforce.
+
+    Crucially, this filter does NOT exclude already-answered questions.
+    The questionnaire screen needs a stable list so that picking an answer
+    doesn't shift the step index under the user (which previously caused
+    Back/Next/last-option-pick to all behave wrongly).
+
+    Prefilled questions live in the review screen, not here.
+    """
+    prefilled = st.session_state.get("prefilled_keys", set())
+    return [q for q in visible_questions(answers) if q["id"] not in prefilled]
 
 
 def goto_next_after_search(sf_data: dict | None) -> None:
@@ -261,18 +281,24 @@ def render_review() -> None:
 # ──────────────────────────────────────────────────────────────────
 
 def render_questionnaire() -> None:
-    # Only walk through questions that don't already have an answer (prefilled
-    # ones live in the review screen). Re-evaluated each rerun so branching
-    # changes (e.g. ddStatus=live makes ddQuality visible) are picked up.
-    rem = remaining_questions(st.session_state.answers)
+    # Use questionnaire_questions (filtered by prefilled_keys), NOT
+    # remaining_questions (filtered by is-answered). The latter shifts the
+    # indexable list every time the AE picks an answer, which is the cause
+    # of the Back/Next/last-option-auto-advance bugs.
+    rem = questionnaire_questions(st.session_state.answers)
     total = len(rem)
     step = st.session_state.step
 
     # No questions left → result. Happens if every visible question was
-    # prefilled, or if the AE just answered the last one.
-    if total == 0 or step >= total:
+    # prefilled — branching may have removed all non-prefilled questions.
+    if total == 0:
         st.session_state.screen = "result"
         st.rerun()
+
+    # Clamp step into the valid range — branching can shorten `rem` mid-flow.
+    if step >= total:
+        st.session_state.step = total - 1
+        step = total - 1
 
     sf_data = st.session_state.sf_data
     if sf_data:
@@ -327,13 +353,14 @@ def render_questionnaire() -> None:
             st.session_state.step -= 1
             st.rerun()
     with nav_next:
-        # Determine "last question" against the freshly-computed remaining set
-        # so branching opening new questions doesn't get misdetected as done.
-        is_last = step == len(remaining_questions(st.session_state.answers)) - 1
+        # is_last is true if this step is the last non-prefilled question
+        # currently visible. Re-evaluated against the same questionnaire
+        # filter so branching openings/closings are picked up.
+        is_last = step == len(questionnaire_questions(st.session_state.answers)) - 1
         next_label = "See recommendation →" if is_last else "Next →"
         if st.button(next_label, type="primary", disabled=(not st.session_state.answers.get(q["id"])), use_container_width=True):
             st.session_state.step += 1
-            if st.session_state.step >= len(remaining_questions(st.session_state.answers)):
+            if st.session_state.step >= len(questionnaire_questions(st.session_state.answers)):
                 st.session_state.screen = "result"
             st.rerun()
 
