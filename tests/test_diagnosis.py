@@ -13,8 +13,7 @@ BA_LIKE = {
     "ddStatus": "new",
     "replacingTool": "no",
     "teamCount": "enterprise",
-    "productCount": "5-7",
-    "productScope": "obs-security",  # BA: governed self-service incl. CSPM/SDS
+    "productScope": ["security"],  # BA: governed self-service incl. CSPM/SDS
     "sponsor": "exec",
     "authority": "central",
     "capability": "strong",
@@ -27,8 +26,7 @@ FCA_LIKE = {
     "ddStatus": "live",
     "ddQuality": "good",
     "teamCount": "large",
-    "productCount": "5-7",
-    "productScope": "obs-security",  # FCA: obs + cloud security stakeholders involved
+    "productScope": ["security"],  # FCA: obs + cloud security stakeholders
     "sponsor": "exec",
     "authority": "central",
     "capability": "strong",
@@ -42,8 +40,7 @@ MIGRATION_HEAVY = {
     "replacingTool": "yes",
     "migVol": "xl",
     "teamCount": "enterprise",
-    "productCount": "3-4",
-    "productScope": "obs-core",
+    "productScope": [],  # obs-only
     "sponsor": "exec",
     "authority": "central",
     "capability": "some",
@@ -56,8 +53,7 @@ SINGLE_TEAM_NEWBIE = {
     "ddStatus": "new",
     "replacingTool": "no",
     "teamCount": "multi",  # avoid the manager-sponsor + single-team Defer trigger
-    "productCount": "3-4",
-    "productScope": "obs-core",
+    "productScope": [],
     "sponsor": "manager",
     "capability": "limited",
     "urgency": "flex",
@@ -69,7 +65,7 @@ SINGLE_TEAM_NEWBIE = {
 
 NO_SPONSOR = {
     "ddStatus": "new", "replacingTool": "no",
-    "teamCount": "multi", "productCount": "3-4", "productScope": "obs-core",
+    "teamCount": "multi", "productScope": [],
     "sponsor": "none", "authority": "central",
     "capability": "some", "urgency": "flex",
     "compliance": "no",
@@ -77,7 +73,7 @@ NO_SPONSOR = {
 
 ENGINEER_NO_FORCING = {
     "ddStatus": "live", "ddQuality": "good",
-    "teamCount": "enterprise", "productCount": "3-4", "productScope": "obs-core",
+    "teamCount": "enterprise", "productScope": [],
     "sponsor": "engineer", "authority": "central",
     "capability": "some", "urgency": "flex",
     "compliance": "no",
@@ -85,7 +81,7 @@ ENGINEER_NO_FORCING = {
 
 ENGINEER_WITH_COMPLIANCE_OVERRIDE = {
     "ddStatus": "live", "ddQuality": "good",
-    "teamCount": "enterprise", "productCount": "3-4", "productScope": "obs-core",
+    "teamCount": "enterprise", "productScope": [],
     "sponsor": "engineer", "authority": "central",
     "capability": "some", "urgency": "flex",
     "compliance": "yes",  # forcing function — overrides engineer-sponsor Defer
@@ -93,7 +89,7 @@ ENGINEER_WITH_COMPLIANCE_OVERRIDE = {
 
 VANITY_TOOLING = {
     "ddStatus": "new", "replacingTool": "no",
-    "teamCount": "single", "productCount": "1-2", "productScope": "obs-core",
+    "teamCount": "single", "productScope": [],  # narrow: no add-ons
     "sponsor": "manager",  # director-tier but small scope, no pressure
     "capability": "some", "urgency": "flex",
     "compliance": "no",
@@ -180,9 +176,9 @@ def test_manager_sponsor_small_scope_diagnoses_as_defer():
     assert d["shape"]["value"] == "Defer"
 
 
-def test_obs_dx_scope_adds_frontend_ownership_bullet():
+def test_dx_addon_adds_frontend_ownership_bullet():
     answers = dict(FCA_LIKE)
-    answers["productScope"] = "obs-dx"
+    answers["productScope"] = ["dx"]
     d = diagnose(answers)
     assert any("frontend" in b.lower() or "rum" in b.lower()
                for b in d["customer_ownership"])
@@ -191,27 +187,40 @@ def test_obs_dx_scope_adds_frontend_ownership_bullet():
                    for b in d["customer_ownership"])
 
 
-def test_obs_ai_scope_adds_ml_ownership_bullet():
+def test_ai_addon_adds_ml_ownership_bullet():
     answers = dict(FCA_LIKE)
-    answers["productScope"] = "obs-ai"
+    answers["productScope"] = ["ai"]
     d = diagnose(answers)
     assert any("data science" in b.lower() or "ml platform" in b.lower() or "llm" in b.lower()
                for b in d["customer_ownership"])
 
 
-def test_platform_scope_fires_all_three_extra_bullets():
+def test_dx_and_ai_combo_fires_both_bullets():
+    # User raised this combo explicitly: obs + DX + AI without security.
+    # Single-select couldn't represent it; multi-select can.
     answers = dict(FCA_LIKE)
-    answers["productScope"] = "platform"
+    answers["productScope"] = ["dx", "ai"]
     d = diagnose(answers)
-    # All three category-specific bullets should fire on platform scope.
+    assert any("frontend" in b.lower() or "rum" in b.lower() for b in d["customer_ownership"])
+    assert any("data science" in b.lower() or "ml platform" in b.lower() for b in d["customer_ownership"])
+    assert not any("security ops and identity" in b.lower() for b in d["customer_ownership"])
+
+
+def test_three_addons_fires_platform_lead_bullet():
+    answers = dict(FCA_LIKE)
+    answers["productScope"] = ["dx", "security", "ai"]
+    d = diagnose(answers)
+    # All three category-specific bullets should fire.
     assert any("frontend" in b.lower() or "rum" in b.lower() for b in d["customer_ownership"])
     assert any("security ops and identity" in b.lower() for b in d["customer_ownership"])
     assert any("data science" in b.lower() or "ml platform" in b.lower() for b in d["customer_ownership"])
+    # Platform-derived bullet for category leads.
+    assert any("category lead" in b.lower() for b in d["customer_ownership"])
 
 
-def test_obs_core_scope_fires_no_extra_category_bullets():
+def test_obs_only_no_addons_fires_no_extra_category_bullets():
     answers = dict(FCA_LIKE)
-    answers["productScope"] = "obs-core"
+    answers["productScope"] = []
     d = diagnose(answers)
     assert not any("frontend" in b.lower() or "rum" in b.lower()
                    for b in d["customer_ownership"])

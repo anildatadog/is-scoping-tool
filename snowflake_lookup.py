@@ -310,9 +310,11 @@ def to_prefill(full: dict) -> dict:
     if team:
         prefill["teamCount"] = team
 
-    products = _count_products(opp.get("PRODUCTS_IN_SCOPE"))
-    if products:
-        prefill["productCount"] = products
+    # productCount removed slice 3.3 (2026-05-27); replaced by multi-select
+    # productScope. SF's "Products in Scope" string doesn't reliably resolve
+    # to add-on categories, so productScope is left for the AE to pick rather
+    # than guessed from SF. _count_products() retained for potential future use.
+    _ = _count_products  # keep imported helper referenced
 
     sponsor = _map_sponsor(opp.get("CHAMPION"), opp.get("ECONOMIC_BUYER"))
     if sponsor:
