@@ -96,11 +96,11 @@ with tab_accel:
         commits=[
             "Execution across every workstream (IS does not own the rollout)",
             "Workstream prioritisation (IS does not own the backlog)",
-            "Exec-level steering so prioritisation is the customer's call",
+            "**Exec-level steering** so IS judgement stays visible — sessions consumed is a poor proxy for impact, surface architectural calls at exec cadence",
         ],
         not_this_if=(
-            "**Invisibility risk** — surface IS judgement clearly and on time. Sessions consumed is a poor proxy for impact unless reframed at exec level. "
-            "If they want the pattern *published* across teams → **Standards-setter**."
+            "Wants the pattern *published* across other teams as a blueprint → **Standards-setter**. "
+            "Existing deployment has broken governance, not just architectural choices to make → **Gap-filler**."
         ),
     )
 
@@ -109,15 +109,18 @@ with tab_gap:
         title="🔧 Gap-filler",
         tagline="Something is broken or they're migrating. IS designs the target state and validates the cutover.",
         say='"We design the target state and validate the work. Hands-on migration is your team or a delivery partner — IS doesn\'t scale to that."',
-        sessions="Audit → target-state design → cutover validation → decommission. **Phased per workstream.**",
+        sessions=(
+            "Audit → target-state design → cutover validation → decommission. **Phased per workstream.** "
+            "_Note: high-volume migration (xl) shifts posture to **IS-led** — IS architects the target state, partner or customer team does the hands-on cutover. IS does not take heavy HOK at this volume._"
+        ),
         commits=[
             "Named decommission owner + audit-trail sign-off",
             "Resource the hands-on remediation / migration (or engage a delivery partner)",
             "Standards adoption — operate the IS-defined target state",
         ],
         not_this_if=(
-            "**High-volume migration (xl)** → posture flips to IS-led with partner/customer executing. IS doesn't take heavy HOK at this volume. "
-            "If governance hasn't broken yet and they're building from zero → **Foundation**."
+            "Governance hasn't broken and they're building from zero → **Foundation**. "
+            "Existing deployment is healthy and they want architectural acceleration → **Accelerator**."
         ),
     )
 
@@ -130,11 +133,11 @@ with tab_std:
         commits=[
             "Replication ownership across remaining teams",
             "Internal training and pattern-divergence governance",
-            "Platform / brokering function to keep the pattern current",
+            "**Central authority** to govern divergence — without a broker function the pattern won't land; push back before scoping if absent",
         ],
         not_this_if=(
-            "Customer wants IS to *scale the rollout* → wrong shape. Reframe as **Accelerator** (advisory) or **Foundation** (with broker authority). "
-            "If they don't have central authority yet, the pattern won't land — push back before scoping."
+            "Wants IS to *scale the rollout* per team rather than just design the pattern → **Accelerator** (advisory) or **Foundation** (with broker authority). "
+            "Existing governance has broken and the standard is corrective remediation, not a forward blueprint → **Gap-filler**."
         ),
     )
 
