@@ -563,6 +563,138 @@ def _build_triggers(
 
 
 # ──────────────────────────────────────────────────────────────────
+# Delivery plan — shape-aware phase template with add-on injection
+# ──────────────────────────────────────────────────────────────────
+# Surfaced when sessions exceed the display cap (120). Replaces the generic
+# "Multi-phase, ~30-60 sessions per SOW" line with an actual phase
+# breakdown. Phase counts are heuristic (calibration pending) but
+# shape-and-scope aware so the AE gets a defensible structure to discuss.
+
+
+class Phase(TypedDict):
+    name: str
+    brief: str
+    sessions_min: int
+    sessions_max: int
+
+
+# Foundation: stand up the operating model from zero.
+_FOUNDATION_PHASES: list[Phase] = [
+    {"name": "Discovery & architecture", "brief": "CMDB ownership, tagging strategy, broker authority, target architecture", "sessions_min": 8, "sessions_max": 12},
+    {"name": "Core observability build", "brief": "Infra, APM, Logs paired with engineers; baseline dashboards and monitors", "sessions_min": 15, "sessions_max": 25},
+]
+_FOUNDATION_HANDOVER: Phase = {
+    "name": "Handover & standards adoption",
+    "brief": "Receiving team takes ownership of the IS-built pattern; documentation; operational readiness review",
+    "sessions_min": 8,
+    "sessions_max": 12,
+}
+
+# Gap-filler: corrective, lifecycle-bounded.
+_GAP_FILLER_PHASES: list[Phase] = [
+    {"name": "Audit & parity criteria", "brief": "Current-state inventory, gap analysis, formal parity criteria for cutover sign-off", "sessions_min": 5, "sessions_max": 10},
+    {"name": "Target-state design", "brief": "IS-designed target architecture, migration sequencing, instrumentation patterns", "sessions_min": 8, "sessions_max": 12},
+    {"name": "Cutover validation", "brief": "Pilot workstream cutover with IS gating; parity sign-off; runbook hardening", "sessions_min": 10, "sessions_max": 20},
+]
+_GAP_FILLER_DECOMMISSION: Phase = {
+    "name": "Decommission",
+    "brief": "Incumbent retirement; audit-trail sign-off; ownership transfer",
+    "sessions_min": 5,
+    "sessions_max": 10,
+}
+
+# Accelerator: continuous advisory, customer-paced.
+_ACCELERATOR_PHASES: list[Phase] = [
+    {"name": "Discovery & priorities", "brief": "Review existing architecture; identify the architectural decisions in flight; agree review cadence", "sessions_min": 3, "sessions_max": 5},
+    {"name": "Continuous architectural review", "brief": "Per-workstream advisory; proposals; written assessments at exec cadence", "sessions_min": 10, "sessions_max": 20},
+]
+
+# Standards-setter: design pattern + pilot; customer/partner replicates.
+_STANDARDS_SETTER_PHASES: list[Phase] = [
+    {"name": "Pattern design", "brief": "Reference architecture, divergence governance, broker authority model", "sessions_min": 8, "sessions_max": 12},
+    {"name": "Pilot build", "brief": "First-instance implementation paired with customer team or named partner", "sessions_min": 10, "sessions_max": 18},
+    {"name": "Documentation & training", "brief": "Pattern documentation, training materials, divergence-governance handover", "sessions_min": 5, "sessions_max": 10},
+]
+
+
+def _addon_phase(addon: str, shape: str) -> Phase | None:
+    """Per-addon phase, sized differently for build-heavy shapes (Foundation,
+    Gap-filler) vs advisory shapes (Accelerator, Standards-setter)."""
+    build_sized = shape in {"Foundation", "Gap-filler"}
+    if addon == "dx":
+        if build_sized:
+            return {"name": "Digital Experience telemetry", "brief": "RUM and Synthetics instrumentation, frontend pairing", "sessions_min": 10, "sessions_max": 15}
+        return {"name": "DX architectural review", "brief": "RUM/Synthetics pattern review, frontend-team pairing cadence", "sessions_min": 4, "sessions_max": 6}
+    if addon == "security":
+        if build_sized:
+            return {"name": "Security telemetry", "brief": "CSPM, ASM, SDS, Cloud SIEM; IAM patterns; security-ops stakeholder onboarding", "sessions_min": 15, "sessions_max": 22}
+        return {"name": "Security architecture review", "brief": "CSPM/ASM/SDS pattern review, security-ops + identity pairing", "sessions_min": 5, "sessions_max": 8}
+    if addon == "ai":
+        if build_sized:
+            return {"name": "AI / LLM workload telemetry", "brief": "LLM Obs, GPU metrics, custom workload identification, data-science-team pairing", "sessions_min": 12, "sessions_max": 20}
+        return {"name": "AI workload advisory", "brief": "LLM Obs pattern review, GPU metric strategy, ML-team pairing", "sessions_min": 5, "sessions_max": 8}
+    if addon == "workflow":
+        if build_sized:
+            return {"name": "Workflow & CI-CD integration", "brief": "CI Visibility, Workflow Automation, Bits AI, platform/DevOps onboarding", "sessions_min": 10, "sessions_max": 15}
+        return {"name": "Workflow architectural review", "brief": "CI-CD and Bits AI integration pattern, DevOps pairing", "sessions_min": 4, "sessions_max": 6}
+    return None
+
+
+def compute_delivery_phases(answers: dict, shape: str) -> list[Phase]:
+    """Build a shape-aware delivery plan with add-on phases injected based on
+    productScope. Defer returns an empty list (verdict, not engagement)."""
+    if shape == "Defer":
+        return []
+
+    addons = _scope_list(answers)
+
+    if shape == "Foundation":
+        phases = list(_FOUNDATION_PHASES)
+        for a in addons:
+            p = _addon_phase(a, shape)
+            if p:
+                phases.append(p)
+        phases.append(_FOUNDATION_HANDOVER)
+        return phases
+
+    if shape == "Gap-filler":
+        phases = list(_GAP_FILLER_PHASES)
+        for a in addons:
+            p = _addon_phase(a, shape)
+            if p:
+                phases.append(p)
+        phases.append(_GAP_FILLER_DECOMMISSION)
+        return phases
+
+    if shape == "Accelerator":
+        phases = list(_ACCELERATOR_PHASES)
+        for a in addons:
+            p = _addon_phase(a, shape)
+            if p:
+                phases.append(p)
+        return phases
+
+    if shape == "Standards-setter":
+        phases = list(_STANDARDS_SETTER_PHASES)
+        for a in addons:
+            p = _addon_phase(a, shape)
+            if p:
+                phases.append(p)
+        return phases
+
+    return []
+
+
+def phases_total_range(phases: list[Phase]) -> tuple[int, int]:
+    """Sum the per-phase ranges to give an overall total range. Used for the
+    AE's SOW templating; still heuristic and labelled as such."""
+    return (
+        sum(p["sessions_min"] for p in phases),
+        sum(p["sessions_max"] for p in phases),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────
 # Public entrypoint
 # ──────────────────────────────────────────────────────────────────
 

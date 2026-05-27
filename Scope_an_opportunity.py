@@ -6,7 +6,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-from diagnosis import compute_defer_verdict, diagnose, package_label
+from diagnosis import (
+    compute_defer_verdict,
+    compute_delivery_phases,
+    diagnose,
+    package_label,
+    phases_total_range,
+)
 from methodologies import build_flags, build_next_steps, recommend, visible_questions
 from prose import generate as generate_prose
 from scoping_doc import build as build_scoping_doc
@@ -523,15 +529,25 @@ def render_result() -> None:
         st.subheader("Commercial")
         if no_sess:
             st.warning("Resolve sponsor blocker before estimating sessions.")
-        elif rec["sMax"] > 80:
-            # Above ~80 the v1 sizing math produces numbers that have no
-            # calibrated basis. Surface the class + a phasing recommendation
-            # rather than a fake-precise range.
+        elif rec["sMax"] > 120:
+            # Above 120 the v1 sizing math compounds into numbers with no
+            # calibrated basis. Replace the raw range with a shape-aware
+            # delivery plan: per-phase scope + per-phase session range. AE
+            # can use the phase total for SOW templating without anchoring
+            # on a single inflated number.
+            phases = compute_delivery_phases(answers, shape)
+            total_min, total_max = phases_total_range(phases)
             st.metric("Package", "Multi-phase")
+            st.markdown(f"**High-level delivery plan** — {len(phases)} phases, estimated **{total_min}-{total_max} sessions total** (heuristic)")
+            for i, p in enumerate(phases, start=1):
+                st.markdown(
+                    f"**{i}. {p['name']}** · {p['sessions_min']}–{p['sessions_max']} sessions  \n"
+                    f"<span style='opacity:.7;'>{p['brief']}</span>",
+                    unsafe_allow_html=True,
+                )
             st.caption(
-                "Phase into SOWs of ~30-60 sessions each; full programme size confirmed "
-                "post-discovery. Specific number withheld — heuristic math is unreliable "
-                "above this threshold."
+                "Phases and session ranges are heuristic — calibration data pending. "
+                "Total is the sum of per-phase ranges; treat as scoping starting point, not commitment."
             )
         else:
             c1, c2 = st.columns(2)
