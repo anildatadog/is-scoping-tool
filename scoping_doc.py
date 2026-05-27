@@ -83,8 +83,8 @@ def build(sf_data: dict | None, answers: dict, rec: dict, diag: Diagnosis,
         )
 
     # ── Engagement-shape branch ───────────────────────────────────────
-    posture = diag["posture"]["value"]
-    constraint = diag["dominant_constraint"]["value"]
+    motion = diag["motion"]["value"]
+    constraints_str = " · ".join(c["value"] for c in diag["binding_constraints"])
 
     if prose and prose.get("diagnosis_paragraph") and prose.get("consequence_paragraph"):
         prose_block = (
@@ -110,7 +110,7 @@ def build(sf_data: dict | None, answers: dict, rec: dict, diag: Diagnosis,
         f"IS SCOPING SUMMARY\n{rule}\n"
         f"Customer: {account_name}{header_tail} · {today}\n"
         f"\n"
-        f"Diagnosis: {shape} · {posture} · {constraint}\n"
+        f"Diagnosis: {shape} · {motion} · {constraints_str}\n"
         f"{prose_block}"
         f"\n"
         f"Customer ownership\n"

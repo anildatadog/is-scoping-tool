@@ -177,11 +177,10 @@ QUESTIONS: list[dict] = [
         ],
         "show": lambda a: True,
     },
-    # securityScope question removed 2026-05-27. The signal it captured —
-    # whether security ops / identity teams will be stakeholders — is now
-    # inferred from productCount + compliance (see diagnosis._security_in_scope).
-    # Asking it explicitly felt redundant with productCount, and the inferred
-    # rule covers the same cases without the extra question.
+    # NOTE: securityScope was a yes/no question that lived here; removed in
+    # slice 3.2 in favour of the productScope multi-select add-on chooser
+    # (slice 3.3). The security-stakeholder signal is now derived from
+    # productScope containing "security". See diagnosis._has_security_scope.
 ]
 
 

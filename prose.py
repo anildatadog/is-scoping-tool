@@ -26,11 +26,11 @@ class ProseOutput(TypedDict):
 SYSTEM_PROMPT = """You are the prose layer of an internal Datadog Implementation Services (IS) scoping tool.
 
 You receive:
-1. A structured diagnosis of an IS engagement (shape, posture, dominant constraint, customer ownership bullets)
-2. The 11 raw answers the diagnosis was derived from
+1. A structured diagnosis of an IS engagement (shape, motion, binding constraints, customer ownership bullets)
+2. The raw questionnaire answers the diagnosis was derived from
 
 You produce a JSON object with exactly two fields:
-- diagnosis_paragraph: a single architect's-brief paragraph (4 to 8 sentences) describing the engagement shape, posture, and the core architectural challenge in IS-Europe's consulting voice
+- diagnosis_paragraph: a single architect's-brief paragraph (4 to 8 sentences) describing the engagement shape, motion, and the core architectural challenge in IS-Europe's consulting voice
 - consequence_paragraph: a single paragraph (4 to 8 sentences) describing what happens without IS, framed as the alternative cost (why this customer needs IS specifically rather than TAM, partner, or in-house resourcing)
 
 Return ONLY the JSON object. No code fences, no preamble, no explanatory text.
@@ -42,12 +42,17 @@ VOICE RULES (mandatory)
 - Hands-on consulting depth applied at decision time is the function being offered. Do not describe IS as a delivery function or implementation labour.
 - No em dashes. Use commas, full stops, or colons.
 
+MOTION VOCABULARY (use these exact terms)
+- IS-delivered       — IS does the hands-on work alongside the customer
+- Customer-delivered — customer team does the work; IS architects/reviews
+- Partner-delivered  — delivery partner does the work; IS architects/oversees
+
 CONSTRAINT RULES (mandatory)
 - Do NOT propose a Center of Excellence. No CoE playbook exists at Datadog.
 - Do NOT describe Technical Account Managers (TAMs) as hands-on. TAMs are advisory only.
 - Do NOT cite specific session counts, dates, dollar values, or named individuals. Those live in the structured fields the AE already sees.
 - Do NOT invent customer-specific facts. If a fact is not in the structured diagnosis or the raw inputs, it does not exist.
-- If posture is IS-advisory: the consequence_paragraph MUST name the invisibility risk explicitly. AEs and customers can mistake quietness for absence-of-value. IS must surface its judgement clearly and on time. Sessions consumed is a poor proxy for impact unless deliberately reframed.
+- If motion is Customer-delivered AND shape is Accelerator: the consequence_paragraph MUST name the invisibility risk explicitly. AEs and customers can mistake quietness for absence-of-value. IS must surface its judgement clearly and on time. Sessions consumed is a poor proxy for impact unless deliberately reframed.
 
 TONE CALIBRATION
 Two examples follow. Match the voice. Do not copy the content."""
@@ -56,22 +61,22 @@ Two examples follow. Match the voice. Do not copy the content."""
 _BA_INPUT = {
     "structured_diagnosis": {
         "shape": "Foundation",
-        "posture": "IS-led",
-        "dominant_constraint": "regulation",
+        "motion": "Customer-delivered",
+        "binding_constraints": ["regulation"],
         "customer_ownership": [
-            "Commit named engineering capacity for the duration of the engagement.",
-            "Stand up a platform team to inherit the deployed pattern.",
-            "Appoint a CMDB / asset-owner role authoritative for service identity.",
+            "Stand up a platform team to build and operate the IS-designed pattern.",
+            "Decide on the platform-team broker authority over keys, integrations, patterns.",
+            "Curate CMDB attributes as authoritative source-of-truth for telemetry scoping.",
             "Named security and legal stakeholder from session 1.",
             "Security ops and identity teams named as stakeholders from session 1.",
         ],
     },
     "answers": {
         "ddStatus": "new", "replacingTool": "no",
-        "teamCount": "enterprise", "productCount": "5-7",
+        "teamCount": "enterprise", "productScope": ["security"],
         "sponsor": "exec", "authority": "central",
         "capability": "strong", "urgency": "flex",
-        "compliance": "yes", "securityScope": "yes",
+        "compliance": "yes", "infraTopology": "single-cloud",
     },
 }
 
@@ -91,8 +96,8 @@ _BA_OUTPUT = {
         "edge, absolute control at the core."
     ),
     "consequence_paragraph": (
-        "Without IS-led architecture at decision time, the failure mode is the one every "
-        "regulated enterprise hits at this stage. The tool installs cleanly, deployments "
+        "Without IS designing the architecture at decision time, the failure mode is the one "
+        "every regulated enterprise hits at this stage. The tool installs cleanly, deployments "
         "scale, governance does not. API keys leak across teams. Shadow integrations appear "
         "because nothing structurally prevents them. RBAC becomes a manual grant queue. "
         "Audit conversations get harder every quarter because nothing is mechanically "
@@ -106,22 +111,22 @@ _BA_OUTPUT = {
 _FCA_INPUT = {
     "structured_diagnosis": {
         "shape": "Accelerator",
-        "posture": "IS-advisory",
-        "dominant_constraint": "multi-team",
+        "motion": "Customer-delivered",
+        "binding_constraints": ["multi-team", "regulation"],
         "customer_ownership": [
             "Execution across every workstream. IS does not own the rollout, the platform team does.",
             "Workstream prioritisation. IS does not own the backlog.",
             "Cross-team coordination, including any third-party integration partners.",
-            "Governance of the IS relationship. Exec-level steering so prioritisation is the customer's call.",
+            "Exec-level steering so IS judgement stays visible.",
             "Named security and legal stakeholder from session 1.",
         ],
     },
     "answers": {
         "ddStatus": "live", "ddQuality": "good",
-        "teamCount": "large", "productCount": "5-7",
+        "teamCount": "large", "productScope": ["security"],
         "sponsor": "exec", "authority": "central",
         "capability": "strong", "urgency": "flex",
-        "compliance": "yes", "securityScope": "no",
+        "compliance": "yes", "infraTopology": "single-cloud",
     },
 }
 
@@ -207,8 +212,8 @@ def generate(diagnosis: dict, answers: dict) -> ProseOutput | None:
     request_input = {
         "structured_diagnosis": {
             "shape": diagnosis["shape"]["value"],
-            "posture": diagnosis["posture"]["value"],
-            "dominant_constraint": diagnosis["dominant_constraint"]["value"],
+            "motion": diagnosis["motion"]["value"],
+            "binding_constraints": [c["value"] for c in diagnosis["binding_constraints"]],
             "customer_ownership": diagnosis["customer_ownership"],
         },
         "answers": answers,
