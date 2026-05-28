@@ -241,6 +241,16 @@ def test_ai_addon_adds_ml_ownership_bullet():
                for b in d["customer_ownership"])
 
 
+def test_finops_addon_adds_finance_ownership_bullet():
+    answers = dict(FCA_LIKE)
+    answers["productScope"] = ["finops"]
+    d = diagnose(answers)
+    assert any("finops" in b.lower() or "finance" in b.lower() or "cost-allocation" in b.lower()
+               for b in d["customer_ownership"])
+    assert not any("security ops and identity" in b.lower()
+                   for b in d["customer_ownership"])
+
+
 def test_dx_and_ai_combo_fires_both_bullets():
     # User raised this combo explicitly: obs + DX + AI without security.
     answers = dict(FCA_LIKE)

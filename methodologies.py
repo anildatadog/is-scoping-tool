@@ -88,6 +88,8 @@ QUESTIONS: list[dict] = [
              "s": "Data science / ML platform team joins as stakeholders. LLM telemetry shape and instrumentation pattern are novel."},
             {"v": "workflow", "l": "Workflow / CI-CD / Bits AI",
              "s": "Platform / DevOps team joins as stakeholders. GitHub / GitLab admin involvement; incident-flow integration."},
+            {"v": "finops", "l": "FinOps / Cloud Cost Management (CCM)",
+             "s": "Finance / FinOps / Platform-Cost team joins as stakeholders. Cloud billing integrations and tag-driven cost-allocation patterns differ from observability."},
         ],
         "show": lambda a: True,
     },
