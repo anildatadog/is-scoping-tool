@@ -82,6 +82,10 @@ def _has_workflow_scope(a: dict) -> bool:
     return "workflow" in _scope_list(a)
 
 
+def _has_finops_scope(a: dict) -> bool:
+    return "finops" in _scope_list(a)
+
+
 def _is_platform_scope(a: dict) -> bool:
     """3+ add-ons selected = platform-scale engagement, regardless of which ones."""
     return len(_scope_list(a)) >= 3
@@ -531,6 +535,8 @@ def compute_customer_ownership(a: dict, shape: str, motion: str) -> list[str]:
         bullets.append("Data science / ML platform team named as stakeholders; LLM Obs telemetry scope and instrumentation pattern agreed before kickoff.")
     if _has_workflow_scope(a):
         bullets.append("Platform / DevOps team named as stakeholders for CI-CD and Workflow Automation; GitHub or GitLab admin access secured for the integration.")
+    if _has_finops_scope(a):
+        bullets.append("Finance / FinOps team named as stakeholders; cloud billing integrations enabled and tag-driven cost-allocation strategy agreed before kickoff.")
     if _is_platform_scope(a):
         bullets.append("Named category lead per add-on area — platform-scale expansion is too broad for a single owner; appoint a category accountable per workstream before kickoff.")
 
@@ -650,6 +656,10 @@ def _addon_phase(addon: str, shape: str) -> Phase | None:
         if build_sized:
             return {"name": "Workflow & CI-CD integration", "brief": "CI Visibility, Workflow Automation, Bits AI, platform/DevOps onboarding", "sessions_min": 10, "sessions_max": 15}
         return {"name": "Workflow architectural review", "brief": "CI-CD and Bits AI integration pattern, DevOps pairing", "sessions_min": 4, "sessions_max": 6}
+    if addon == "finops":
+        if build_sized:
+            return {"name": "Cloud Cost Management (CCM) onboarding", "brief": "AWS / GCP / Azure billing integrations, cost-allocation tagging, FinOps stakeholder onboarding", "sessions_min": 8, "sessions_max": 12}
+        return {"name": "FinOps advisory", "brief": "CCM pattern review, cost-allocation tagging strategy, FinOps-team pairing", "sessions_min": 3, "sessions_max": 5}
     return None
 
 
