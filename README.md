@@ -51,12 +51,34 @@ Same pattern as `splunk-dd-migration-mcp`.
 In the container, Snowflake auth uses a programmatic access token (PAT):
 
 - `authenticator=PROGRAMMATIC_ACCESS_TOKEN` with `token=<pat>` (not `password=<pat>`).
-- `user=` must be the **email login form** (e.g. `ANILKUMAR.PAPPU@DATADOGHQ.COM`), not the user-object name.
-- The PAT has network-policy bypass enabled in Snowsight. This is alpha-grade; v2 needs a real `NETWORK_POLICY` on the user.
+- `user=` must be the **email login form** (e.g. `IS_SCOPING_TOOL_USER@…` once the service user lands), not the user-object name.
 
 Locally, `snowflake_lookup.py` falls back to `externalbrowser` SSO when no PAT / private-key env is present.
 
-The DNAINT-tracked Snowflake service user (key-pair auth) is **no longer required** — the PAT path replaces it.
+#### Network policy + service user (in flight, 2026-05-28)
+
+The Snowflake side is being moved off Anil's personal user to a dedicated service user (`IS_SCOPING_TOOL_USER`) with a 1-year PAT and an IP-allowlist network policy. Tracking: [DNAINT-3266](https://datadoghq.atlassian.net/browse/DNAINT-3266) and [dd-analytics#73068](https://github.com/DataDog/dd-analytics/pull/73068).
+
+Per [Datadog's Snowflake Access Control policy](https://datadoghq.atlassian.net/wiki/spaces/adp/pages/5289607973/Overview+Snowflake+Access+Control), a Cloud Run service serving multiple AEs is the "Shared Users — Service User" pattern, not individual SSO. The earlier personal-PAT + 24h bypass approach failed daily because Snowflake caps `MINS_TO_BYPASS_NETWORK_POLICY_REQUIREMENT` at 1440 minutes and the renewal SQL can't be run from a PAT-authenticated session.
+
+Once the service user lands, swap the `SNOWFLAKE_USER` and `SNOWFLAKE_PAT` Secret Manager values and redeploy. No code change needed.
+
+### Network egress (Cloud NAT)
+
+Cloud Run egress is dynamic by default. Snowflake network policies need a stable source IP, so the service routes outbound traffic through a dedicated Cloud NAT pinned to a reserved external IP:
+
+| Resource | Name | Value |
+|---|---|---|
+| Reserved external IP | `is-scoping-tool-egress-ip` | `35.192.132.11` |
+| Cloud Router | `is-scoping-tool-router` | `us-central1` |
+| Cloud NAT | `is-scoping-tool-nat` | bound to the reserved IP, `--nat-all-subnet-ip-ranges` |
+| Serverless VPC Access connector | `is-scoping-tool-vpc` | `10.8.0.0/28`, `e2-micro`, 2–3 instances |
+
+The Cloud Run service is attached via `--vpc-connector=is-scoping-tool-vpc --vpc-egress=all-traffic`. All outbound traffic from the container — Snowflake, Anthropic, anything — exits via `35.192.132.11`. Verified `2026-05-28` with a one-shot Cloud Run job hitting `ifconfig.me`.
+
+Cost: ~$45/mo (Cloud NAT ~$32, VPC connector ~$10, reserved IP ~$3) plus minor egress data charges.
+
+If the Cloud Run service is recreated, the VPC connector + egress flags must be re-applied explicitly. `gcloud run deploy --source .` preserves these across normal redeploys.
 
 ### Secrets
 
@@ -83,6 +105,7 @@ Container build cache: bump the `# Cache-bust marker` line in `Dockerfile` when 
 
 ## Status
 
-- **v1 deployed and AE-usable** on Cloud Run.
+- **v1 deployed and AE-usable** on Cloud Run with static egress via Cloud NAT (`35.192.132.11`).
+- **Snowflake service-user migration in flight** — `IS_SCOPING_TOOL_USER` via [dd-analytics#73068](https://github.com/DataDog/dd-analytics/pull/73068). 1-year PAT will replace the personal-PAT-as-Anil setup once ADP applies + issues. Swap `SNOWFLAKE_USER` / `SNOWFLAKE_PAT` secrets when it lands; no code change.
 - **`deploy.sh` is stale** (Howler-only). Rewrite as a Cloud Run script when next touched.
-- **v2 output redesign locked but not implemented** — replaces the 9-methodology selector with a structured diagnosis (shape / posture / dominant constraint / customer ownership / consequence / commercial footer).
+- **v2 output redesign in progress** — diagnosis-led output (shape / motion / binding constraints / customer ownership / consequence) shipped 2026-05-27 across slices 1–3.9. `productScope` includes FinOps / Cloud Cost Management (CCM) as of 2026-05-28.
