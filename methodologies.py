@@ -287,6 +287,7 @@ def recommend(a: dict) -> dict:
         + (12 if "security" in ps else 0)
         + (10 if "ai" in ps else 0)
         + (8  if "workflow" in ps else 0)
+        + (6  if "finops" in ps else 0)
         + (10 if len(ps) >= 3 else 0)
     )
 
@@ -381,6 +382,8 @@ def build_flags(a: dict, key: str, s_max: int | None = None) -> list[dict]:
         f.append({"t": "inf", "m": "AI / LLM Observability in scope: data science / ML platform team joins as stakeholders. Telemetry shape and instrumentation pattern are novel — plan extra discovery."})
     if "workflow" in ps:
         f.append({"t": "inf", "m": "Workflow / CI-CD / Bits AI in scope: platform / DevOps team joins as stakeholders. GitHub or GitLab admin involvement; incident-flow integration with on-call and case management."})
+    if "finops" in ps:
+        f.append({"t": "inf", "m": "FinOps / CCM in scope: Finance / FinOps / Platform-Cost team joins as stakeholders. Cloud billing integrations and tag-driven cost-allocation patterns differ from observability — plan extra cycles for tagging hygiene."})
     if len(ps) >= 3:
         f.append({"t": "wrn", "m": "Platform-scale expansion (3+ add-on categories): broadest stakeholder set across engineering, frontend, security, and ML. Long cross-category coordination cycle — phase deliberately and assign a category lead per area."})
     if a.get("authority") == "auto" and a.get("teamCount") != "single":
@@ -441,6 +444,8 @@ def build_next_steps(a: dict, key: str) -> list[str]:
         ns.append("Identify data science / ML platform team stakeholders. LLM Obs telemetry pattern is novel; agree the instrumentation approach before kickoff.")
     if "workflow" in ps:
         ns.append("Identify platform / DevOps team stakeholders for CI-CD and workflow automation. GitHub or GitLab admin access will be needed for the integration.")
+    if "finops" in ps:
+        ns.append("Identify Finance / FinOps team stakeholders. Cloud billing integrations and tag-driven cost-allocation strategy need to be agreed before kickoff.")
     topos = _topology_list(a)
     if "multi-cloud" in topos:
         ns.append("Identify a named cloud-platform lead per cloud before scoping is finalised.")
