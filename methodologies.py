@@ -100,9 +100,11 @@ QUESTIONS: list[dict] = [
     {
         "id": "infraTopology",
         "q": "Which infra topologies apply?",
-        "hint": "Single public cloud (AWS, Azure, GCP) is the baseline — pick any topologies that compound on top. Multiple can apply (e.g. multi-cloud + sovereign, or hybrid + GPU-as-a-Service). Leave empty for single-cloud only.",
+        "hint": "Select all that apply. Multiple can apply (e.g. multi-cloud + sovereign, or hybrid + GPU-as-a-Service).",
         "kind": "multiselect",
         "opts": [
+            {"v": "single-cloud", "l": "Single public cloud (AWS, Azure, or GCP)",
+             "s": "Standard single-provider deployment. No additional topology complexity."},
             {"v": "multi-cloud", "l": "Multi-cloud — two or more public clouds in active use",
              "s": "Per-cloud integration accounts and IAM strategies; cross-cloud tag normalisation surface."},
             {"v": "sovereign", "l": "Sovereign / regulated cloud (gov cloud, in-country residency)",
