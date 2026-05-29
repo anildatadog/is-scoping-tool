@@ -60,16 +60,55 @@ is-scoping-tool/
 | `is-scoping-frontend` | Node 20 | Public | NextAuth.js + Google OAuth | None needed |
 | `is-scoping-backend` | Python 3.11 | Internal | Cloud Run IAM invoker | `is-scoping-tool-vpc` |
 
+### System architecture
+
+```mermaid
+graph TD
+    Browser["Browser (@datadoghq.com)"]
+    FE["is-scoping-frontend\nNext.js · Cloud Run · public"]
+    BE["is-scoping-backend\nFastAPI · Cloud Run · internal"]
+    SF["Snowflake\nREPORTING.GTM / BILLING"]
+    ANT["Anthropic API\nClaude prose layer"]
+    NAT["Cloud NAT\nStatic IP 35.192.132.11"]
+    VPC["VPC connector\nis-scoping-tool-vpc"]
+    GOOG["Google OAuth\nsplunk-dd-google-client"]
+
+    Browser -->|HTTPS| FE
+    FE -->|NextAuth.js| GOOG
+    FE -->|Cloud Run IAM invoker| BE
+    BE --> VPC
+    VPC --> NAT
+    NAT -->|Allowlisted IP| SF
+    BE -->|HTTPS| ANT
+```
+
 ### Request flow
 
-```
-Browser
-  → is-scoping-frontend (Next.js, public)
-      → NextAuth.js session check
-      → /api/* proxy routes
-          → is-scoping-backend (FastAPI, Cloud Run internal URL)
-              → Snowflake (via is-scoping-tool-vpc → Cloud NAT → 35.192.132.11)
-              → Anthropic API (prose generation)
+```mermaid
+sequenceDiagram
+    actor AE as AE / Manager
+    participant FE as is-scoping-frontend
+    participant Auth as Google OAuth
+    participant BE as is-scoping-backend
+    participant SF as Snowflake
+    participant LLM as Anthropic
+
+    AE->>FE: Visit app
+    FE->>Auth: Redirect (hd=datadoghq.com)
+    Auth-->>FE: JWT session cookie
+    AE->>FE: Search opp / account
+    FE->>BE: GET /search?q=... (IAM token)
+    BE->>SF: Query GTM tables
+    SF-->>BE: Account + opp rows
+    BE-->>FE: Prefill + SF data
+    AE->>FE: Complete questionnaire
+    FE->>BE: POST /diagnose {answers}
+    BE-->>FE: Diagnosis + session estimate
+    FE->>BE: POST /prose {diagnosis}
+    BE->>LLM: Generate paragraphs
+    LLM-->>BE: Prose
+    BE-->>FE: Proposal output
+    FE-->>AE: Phase 1 proposal (copy-paste ready)
 ```
 
 ### Infrastructure continuity
@@ -100,6 +139,24 @@ Frontend → backend calls use Cloud Run IAM (invoker role). User email passed i
 | POST | `/prose` | `prose.generate()` |
 
 ## Two-phase screen flow
+
+```mermaid
+flowchart LR
+    subgraph Phase1["Phase 1 — Self-service (no TPS required)"]
+        S1[Search\nopp ID or name] --> S2[Review prefill\nMRR · products]
+        S2 --> S3[Questionnaire\nstep-by-step]
+        S3 --> S4[Proposal output\nexec overview · scope\nshared responsibility]
+        S4 --> CTA["CTA: Submit TPS request"]
+    end
+    subgraph Phase2["Phase 2 — Deep scope (post-TPS)"]
+        P1[Import Phase 1] --> P2{Choose flow}
+        P2 -->|EMEA| P3A[Pre-made modules]
+        P2 -->|Americas| P3B[Custom workstreams]
+        P3A --> P4[Full proposal\nOlympus charter format]
+        P3B --> P4
+    end
+    Phase1 --> Phase2
+```
 
 ### Phase 1 — Self-service (AE-facing)
 
