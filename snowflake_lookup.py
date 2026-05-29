@@ -15,7 +15,8 @@ from typing import Any
 import snowflake.connector
 
 
-OPP_ID_RE = re.compile(r"^006[a-zA-Z0-9]{15}$")
+# Salesforce opp IDs: 15-char case-sensitive (006 + 12) or 18-char with checksum (006 + 15)
+OPP_ID_RE = re.compile(r"^006[a-zA-Z0-9]{12,15}$")
 
 _REGULATED_KEYWORDS = (
     "financial", "bank", "insurance", "healthcare", "hospital",
@@ -171,34 +172,37 @@ def fetch_open_opp(account_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
-def fetch_dd_product_count(account_id: str) -> int:
+def fetch_dd_products(account_id: str) -> list[str]:
+    """Returns distinct won product attach category names for the account."""
     sql = """
-        SELECT COUNT(*) AS DD_PRODUCT_COUNT
-        FROM REPORTING.BILLING.CS_PRODUCT_ATTACH p
-        WHERE p.SALESFORCE_ACCOUNT_ID = %(account_id)s
-          AND p.IS_WON = 1
+        SELECT DISTINCT PRODUCT_ATTACH_LABEL
+        FROM REPORTING.BILLING.CS_PRODUCT_ATTACH
+        WHERE SALESFORCE_ACCOUNT_ID = %(account_id)s
+          AND IS_WON = 1
+          AND PRODUCT_ATTACH_LABEL IS NOT NULL
+        ORDER BY PRODUCT_ATTACH_LABEL
     """
     rows = _query(sql, {"account_id": account_id})
-    return int(rows[0]["DD_PRODUCT_COUNT"]) if rows else 0
+    return [r["PRODUCT_ATTACH_LABEL"] for r in rows]
 
 
 def fetch_full(account: dict) -> dict:
-    """Given an account row, fetch open opp + DD product count in parallel."""
+    """Given an account row, fetch open opp + contracted DD products in parallel."""
     account_id = account["ACCOUNT_ID"]
     with ThreadPoolExecutor(max_workers=2) as ex:
         opp_f = ex.submit(fetch_open_opp, account_id)
-        dd_f = ex.submit(fetch_dd_product_count, account_id)
+        dd_f = ex.submit(fetch_dd_products, account_id)
         opp = opp_f.result()
-        dd_count = dd_f.result()
-    return {"account": account, "opp": opp, "dd_product_count": dd_count}
+        dd_products = dd_f.result()
+    return {"account": account, "opp": opp, "dd_products": dd_products}
 
 
 # ──────────────────────────────────────────────────────────────────
 # Field mapping
 # ──────────────────────────────────────────────────────────────────
 
-def _map_dd_status(dd_product_count: int) -> str:
-    return "live" if dd_product_count > 0 else "new"
+def _map_dd_status(dd_products: list[str]) -> str:
+    return "live" if dd_products else "new"
 
 
 def _map_compliance(industry: str | None) -> str:
@@ -296,11 +300,11 @@ def to_prefill(full: dict) -> dict:
     """Maps a `fetch_full` result to the prefill answer dict the questionnaire consumes."""
     account = full["account"]
     opp = full.get("opp") or {}
-    dd_count = full.get("dd_product_count", 0)
+    dd_products = full.get("dd_products", [])
 
     prefill: dict = {}
 
-    prefill["ddStatus"] = _map_dd_status(dd_count)
+    prefill["ddStatus"] = _map_dd_status(dd_products)
 
     compliance = _map_compliance(account.get("INDUSTRY"))
     if compliance:
@@ -350,6 +354,7 @@ def to_sf_data(full: dict) -> dict:
         "oppName": opp.get("OPPORTUNITY_NAME"),
         "oppStage": opp.get("STAGE"),
         "oppCloseDate": opp.get("CLOSE_DATE").isoformat() if isinstance(opp.get("CLOSE_DATE"), (date, datetime)) else opp.get("CLOSE_DATE"),
-        "hasExistingDD": full.get("dd_product_count", 0) > 0,
+        "ddProducts": full.get("dd_products", []),
+        "hasExistingDD": bool(full.get("dd_products")),
         "prefill": to_prefill(full),
     }
