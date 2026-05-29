@@ -561,13 +561,13 @@ def render_result() -> None:
                 "Total is the sum of per-phase ranges; treat as scoping starting point, not commitment."
             )
         else:
-            _rate = 1700
-            dollar_min = rec["sMin"] * _rate
-            dollar_max = rec["sMax"] * _rate
+            from scoping_doc import _session_rate
+            dollar_min = rec["sMin"] * _session_rate(rec["sMin"])
+            dollar_max = rec["sMax"] * _session_rate(rec["sMax"])
             c1, c2 = st.columns(2)
             c1.metric("Package", package_label(rec["sMax"]))
             c2.metric("Indicative value", f"${dollar_min:,} – ${dollar_max:,}")
-            st.caption(f"{rec['sMin']}–{rec['sMax']} sessions at ${_rate:,}/session · heuristic, calibration pending")
+            st.caption(f"{rec['sMin']}–{rec['sMax']} sessions · tiered pricing ($1,900 <30 sessions, $1,700 at 30+) · heuristic, calibration pending")
 
     st.subheader("Copy scoping summary")
     st.caption("Click the copy icon (top right of the code block) to paste into Slack, Jira, or email.")
