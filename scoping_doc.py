@@ -25,7 +25,9 @@ from methodologies import build_flags, build_next_steps
 _SESSION_DISPLAY_CAP = 120
 
 
-_RATE_PER_SESSION = 1700
+def _session_rate(sessions: int) -> int:
+    """$1,900/session for packages under 30; $1,700/session at 30+."""
+    return 1700 if sessions >= 30 else 1900
 
 
 def _commercial_block(rec: dict, answers: dict, shape: str) -> str:
@@ -39,12 +41,12 @@ def _commercial_block(rec: dict, answers: dict, shape: str) -> str:
         if not phases:
             return "Commercial: Multi-phase — engagement shape doesn't define phases."
         total_min, total_max = phases_total_range(phases)
-        dollar_min = total_min * _RATE_PER_SESSION
-        dollar_max = total_max * _RATE_PER_SESSION
+        dollar_min = total_min * _session_rate(total_min)
+        dollar_max = total_max * _session_rate(total_max)
         header = (
             f"Commercial: Multi-phase · {len(phases)} phases, "
             f"~{total_min}-{total_max} sessions · ${dollar_min:,}–${dollar_max:,} "
-            f"(at ${_RATE_PER_SESSION:,}/session, heuristic, calibration pending)."
+            f"(tiered pricing, heuristic, calibration pending)."
         )
         phase_lines = "\n".join(
             f"  {i}. {p['name']} ({p['sessions_min']}-{p['sessions_max']} sessions)\n     {p['brief']}"
@@ -53,11 +55,11 @@ def _commercial_block(rec: dict, answers: dict, shape: str) -> str:
         return f"{header}\n{phase_lines}"
 
     label = _package_label_short(rec["sMax"])
-    dollar_min = rec["sMin"] * _RATE_PER_SESSION
-    dollar_max = rec["sMax"] * _RATE_PER_SESSION
+    dollar_min = rec["sMin"] * _session_rate(rec["sMin"])
+    dollar_max = rec["sMax"] * _session_rate(rec["sMax"])
     return (
         f"Commercial: {label} · {rec['sMin']}-{rec['sMax']} sessions · "
-        f"${dollar_min:,}–${dollar_max:,} (at ${_RATE_PER_SESSION:,}/session, heuristic, calibration pending)."
+        f"${dollar_min:,}–${dollar_max:,} (tiered pricing, heuristic, calibration pending)."
     )
 
 
