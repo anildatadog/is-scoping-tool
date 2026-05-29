@@ -173,8 +173,8 @@ def render_search() -> None:
                                                    "CURRENT_ENVIRONMENT_TOOLS", "PRIMARY_COMPETITOR",
                                                    "PRIMARY_COMPETITOR_INCUMBENT_STATUS", "CHAMPION",
                                                    "ECONOMIC_BUYER", "CLOSE_DATE", "TYPE", "STAGE")}
-                        dd_count = sf.fetch_dd_product_count(account["ACCOUNT_ID"])
-                        full = {"account": account, "opp": opp, "dd_product_count": dd_count}
+                        dd_products = sf.fetch_dd_products(account["ACCOUNT_ID"])
+                        full = {"account": account, "opp": opp, "dd_products": dd_products}
                         goto_next_after_search(sf.to_sf_data(full))
                         st.rerun()
                 else:
@@ -231,6 +231,13 @@ def render_review() -> None:
         if sf_data.get("oppName"):
             sub += f" · {sf_data['oppName']}"
         st.markdown(sub)
+        col_mrr, col_prod = st.columns(2)
+        mrr = sf_data.get("accountFamilyMRR")
+        col_mrr.metric("Account MRR", f"${mrr:,.0f}" if mrr else "—")
+        dd_products = sf_data.get("ddProducts") or []
+        col_prod.markdown(
+            f"**Contracted products**  \n{'  \n'.join(f'- {p}' for p in dd_products) if dd_products else '_None on record_'}"
+        )
     st.caption("These values came from Salesforce. Edit any that look wrong, then continue.")
 
     # Only show questions whose answer is already set AND are visible per branching.
@@ -327,8 +334,13 @@ def render_questionnaire() -> None:
     sf_data = st.session_state.sf_data
     if sf_data:
         pre_count = len(st.session_state.prefilled_keys)
+        mrr = sf_data.get("accountFamilyMRR")
+        mrr_str = f" · MRR ${mrr:,.0f}" if mrr else ""
+        dd_products = sf_data.get("ddProducts") or []
+        prod_str = f" · {', '.join(dd_products)}" if dd_products else ""
         st.info(f"⚡ **{sf_data.get('accountName') or '?'}**"
                 + (f" — {sf_data.get('oppName')}" if sf_data.get('oppName') else "")
+                + mrr_str + prod_str
                 + f"   ·   {pre_count} fields from Snowflake (review to edit)")
         if st.button("← Edit Salesforce answers", use_container_width=False):
             st.session_state.screen = "review"
@@ -550,10 +562,13 @@ def render_result() -> None:
                 "Total is the sum of per-phase ranges; treat as scoping starting point, not commitment."
             )
         else:
+            _rate = 1700
+            dollar_min = rec["sMin"] * _rate
+            dollar_max = rec["sMax"] * _rate
             c1, c2 = st.columns(2)
             c1.metric("Package", package_label(rec["sMax"]))
-            c2.metric("Session estimate", f"{rec['sMin']}–{rec['sMax']}")
-            st.caption("Heuristic — calibration data pending. Treat as range, not commitment.")
+            c2.metric("Indicative value", f"${dollar_min:,} – ${dollar_max:,}")
+            st.caption(f"{rec['sMin']}–{rec['sMax']} sessions at ${_rate:,}/session · heuristic, calibration pending")
 
     st.subheader("Copy scoping summary")
     st.caption("Click the copy icon (top right of the code block) to paste into Slack, Jira, or email.")

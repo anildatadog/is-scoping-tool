@@ -86,9 +86,14 @@ def _has_finops_scope(a: dict) -> bool:
     return "finops" in _scope_list(a)
 
 
+def _addon_list(a: dict) -> list[str]:
+    """Add-on product scopes excluding the standard observability base."""
+    return [s for s in _scope_list(a) if s != "infra_apm_logs"]
+
+
 def _is_platform_scope(a: dict) -> bool:
-    """3+ add-ons selected = platform-scale engagement, regardless of which ones."""
-    return len(_scope_list(a)) >= 3
+    """3+ add-ons (excluding the standard obs base) = platform-scale engagement."""
+    return len(_addon_list(a)) >= 3
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -158,7 +163,7 @@ def compute_shape(a: dict) -> _Field:
             triggers.append(("migVol", mig_vol or ""))
         return {"value": "Gap-filler", "triggers": triggers}
 
-    if dd_status == "new" or (dd_quality == "rebuild" and replacing == "no"):
+    if dd_status in ("new", "different_bu") or (dd_quality == "rebuild" and replacing == "no"):
         triggers = [("ddStatus", dd_status or "")]
         if dd_quality == "rebuild":
             triggers.append(("ddQuality", "rebuild"))
@@ -174,7 +179,7 @@ def compute_shape(a: dict) -> _Field:
         and dd_quality == "good"
         and authority == "central"
         and team_count in {"enterprise", "large"}
-        and len(scope_addons) >= 2
+        and len([s for s in scope_addons if s != "infra_apm_logs"]) >= 2
     ):
         return {
             "value": "Standards-setter",
@@ -354,8 +359,8 @@ def compute_binding_constraints(a: dict) -> list[_Field]:
     if team_count == "enterprise" and authority != "central":
         add("multi-team", [("teamCount", "enterprise"), ("authority", authority or "unknown")])
 
-    # 7. Scale (broad scope at enterprise/large team count)
-    if len(scope_addons) >= 3 and team_count in {"enterprise", "large"}:
+    # 7. Scale (broad add-on scope at enterprise/large team count)
+    if len([s for s in scope_addons if s != "infra_apm_logs"]) >= 3 and team_count in {"enterprise", "large"}:
         add(
             "scale",
             [
@@ -669,7 +674,7 @@ def compute_delivery_phases(answers: dict, shape: str) -> list[Phase]:
     if shape == "Defer":
         return []
 
-    addons = _scope_list(answers)
+    addons = _addon_list(answers)
 
     if shape == "Foundation":
         phases = list(_FOUNDATION_PHASES)

@@ -16,6 +16,8 @@ QUESTIONS: list[dict] = [
         "opts": [
             {"v": "live", "l": "Yes — already using Datadog",
              "s": "Existing customer with active DD orgs"},
+            {"v": "different_bu", "l": "Yes — but in a different BU (net new for this opportunity)",
+             "s": "Datadog exists elsewhere in the company; this team or division has no active org"},
             {"v": "new", "l": "No — this is new for them",
              "s": "Net new Datadog deployment"},
         ],
@@ -44,7 +46,7 @@ QUESTIONS: list[dict] = [
             {"v": "no", "l": "No — starting fresh, nothing to migrate",
              "s": "No dashboards or alerts to recreate"},
         ],
-        "show": lambda a: a.get("ddStatus") == "new" or a.get("ddQuality") == "rebuild",
+        "show": lambda a: a.get("ddStatus") in ("new", "different_bu") or a.get("ddQuality") == "rebuild",
     },
     {
         "id": "migVol",
@@ -76,10 +78,12 @@ QUESTIONS: list[dict] = [
     },
     {
         "id": "productScope",
-        "q": "Which add-on product categories are in scope?",
-        "hint": "Standard observability (Infra, APM, Logs) is always the base. Pick zero or more add-ons. Leave empty for observability-only.",
+        "q": "Which Datadog product categories are in scope?",
+        "hint": "Select all that apply. Leave empty if no products have been identified yet.",
         "kind": "multiselect",
         "opts": [
+            {"v": "infra_apm_logs", "l": "Standard observability — Infra, APM, Logs",
+             "s": "Host / container / Kubernetes infrastructure monitoring, distributed tracing, log management."},
             {"v": "dx", "l": "Digital Experience (RUM, Synthetics)",
              "s": "Frontend / web / mobile teams join as stakeholders. JS instrumentation and browser-side telemetry follow a different deployment pattern."},
             {"v": "security", "l": "Cloud Security (CSPM, ASM, SDS, CWPP, Cloud SIEM)",
@@ -282,13 +286,15 @@ def recommend(a: dict) -> dict:
     # the platform-coordination overhead. Replaces the productCount product
     # bump (slice 3.3, 2026-05-27).
     ps = a.get("productScope") or []
+    # Count add-ons excluding the base (infra_apm_logs) for platform-scale threshold
+    ps_addons = [p for p in ps if p != "infra_apm_logs"]
     sec = (
         (5  if "dx" in ps else 0)
         + (12 if "security" in ps else 0)
         + (10 if "ai" in ps else 0)
         + (8  if "workflow" in ps else 0)
         + (6  if "finops" in ps else 0)
-        + (10 if len(ps) >= 3 else 0)
+        + (10 if len(ps_addons) >= 3 else 0)
     )
 
     # Issue #6: decentralised authority (auto) in any multi-team setup adds
