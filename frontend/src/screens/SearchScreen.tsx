@@ -7,7 +7,7 @@ import { useP2State } from '@/hooks/useP2State'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import type { AccountResult, SfData } from '@shared/api-types'
+import type { AccountResult, SfData } from '@/api-types'
 
 export function SearchScreen() {
   const [q, setQ] = useState('')

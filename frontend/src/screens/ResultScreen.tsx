@@ -67,7 +67,7 @@ export function ResultScreen() {
 
           {diag.flags.length > 0 && (
             <div className="space-y-2">
-              {diag.flags.map((f, i) => (
+              {diag.flags.map((f: { t: string; m: string }, i: number) => (
                 <div key={i} className="flex items-start gap-2">
                   <Badge variant={FLAG_VARIANT[f.t] ?? 'secondary'} className="mt-0.5 shrink-0">{f.t.toUpperCase()}</Badge>
                   <p className="text-sm">{f.m}</p>
@@ -81,7 +81,7 @@ export function ResultScreen() {
               <CardHeader><CardTitle className="text-sm">Customer owns</CardTitle></CardHeader>
               <CardContent>
                 <ul className="space-y-1">
-                  {diag.diagnosis.customer_ownership.map((b, i) => (
+                  {diag.diagnosis.customer_ownership.map((b: string, i: number) => (
                     <li key={i} className="text-sm flex gap-2"><span>·</span><span>{b}</span></li>
                   ))}
                 </ul>
