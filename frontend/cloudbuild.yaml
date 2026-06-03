@@ -1,0 +1,24 @@
+steps:
+  # Build the Vite app fresh — no Docker layer caching involved
+  - name: 'node:20-slim'
+    entrypoint: bash
+    args:
+      - -c
+      - npm ci && npm run build
+
+  # Package the built dist/ into a minimal nginx image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - --no-cache
+      - -f
+      - Dockerfile.nginx
+      - -t
+      - '$_IMAGE_TAG'
+      - .
+
+images:
+  - '$_IMAGE_TAG'
+
+substitutions:
+  _IMAGE_TAG: us-central1-docker.pkg.dev/datadog-tam-sandbox/cloud-run-source-deploy/is-scoping-frontend:latest
