@@ -394,9 +394,8 @@ def render_review() -> None:
         mrr = sf_data.get("accountFamilyMRR")
         col_mrr.metric("Account MRR", f"${mrr:,.0f}" if mrr else "—")
         dd_products = sf_data.get("ddProducts") or []
-        col_prod.markdown(
-            f"**Contracted products**  \n{'  \n'.join(f'- {p}' for p in dd_products) if dd_products else '_None on record_'}"
-        )
+        products_md = "  \n".join(f"- {p}" for p in dd_products) if dd_products else "_None on record_"
+        col_prod.markdown(f"**Contracted products**  \n{products_md}")
     st.caption("These values came from Salesforce. Edit any that look wrong, then continue.")
 
     # Only show questions whose answer is already set AND are visible per branching.
