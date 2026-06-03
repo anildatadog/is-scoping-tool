@@ -1,0 +1,789 @@
+"""Structured diagnosis synthesis — v2 scoping tool.
+
+Produces a structured architect's brief from the questionnaire inputs:
+  shape:               Foundation | Accelerator | Gap-filler | Standards-setter | Defer
+  motion:              IS-delivered | Customer-delivered | Partner-delivered
+  binding_constraints: ordered list, all that apply (priority preserved as order)
+  triggers:            consolidated audit trail (which inputs fired which field)
+  customer_ownership:  composed from (shape, motion) plus conditional bullets
+
+All rule-based. No LLM. The questionnaire (methodologies.QUESTIONS) is
+unchanged. The v1 session-estimate math (methodologies.recommend) is retained
+and consumed separately for the commercial footer.
+
+Schema history:
+  Slice 1   : initial shape/posture/dominant_constraint
+  Slice 3.1 : Defer shape + no-heavy-HOK policy for high-volume Gap-filler
+  Slice 3.3 : productScope as multi-select list; productCount dropped
+  Slice 3.7 : posture→motion (3 values), dominant_constraint→binding_constraints (list),
+              Standards-setter precedence over Accelerator for centrally-governed
+              broad-scope mature customers
+"""
+from __future__ import annotations
+
+from typing import TypedDict
+
+
+class _Field(TypedDict):
+    value: str
+    triggers: list[tuple[str, str]]
+
+
+class Trigger(TypedDict):
+    signal: str
+    value: str
+    contributed_to: list[str]
+
+
+class Diagnosis(TypedDict):
+    shape: _Field
+    motion: _Field
+    binding_constraints: list[_Field]
+    triggers: list[Trigger]
+    customer_ownership: list[str]
+
+
+# ──────────────────────────────────────────────────────────────────
+# productScope helpers (multi-select list)
+# ──────────────────────────────────────────────────────────────────
+
+def _scope_list(a: dict) -> list[str]:
+    """productScope is a multi-select list (slice 3.3). Returns [] when
+    absent or unanswered (= observability-only)."""
+    return a.get("productScope") or []
+
+
+def _topology_list(a: dict) -> list[str]:
+    """infraTopology is a multi-select list (slice 3.10). Returns [] when
+    absent (= single-cloud baseline). Back-compat coercion: any old single
+    string value still in session state — "single-cloud" → []; anything
+    else → single-item list."""
+    val = a.get("infraTopology")
+    if val is None:
+        return []
+    if isinstance(val, str):
+        return [] if val == "single-cloud" else [val]
+    return val
+
+
+def _has_security_scope(a: dict) -> bool:
+    return "security" in _scope_list(a)
+
+
+def _has_dx_scope(a: dict) -> bool:
+    return "dx" in _scope_list(a)
+
+
+def _has_ai_scope(a: dict) -> bool:
+    return "ai" in _scope_list(a)
+
+
+def _has_workflow_scope(a: dict) -> bool:
+    return "workflow" in _scope_list(a)
+
+
+def _has_finops_scope(a: dict) -> bool:
+    return "finops" in _scope_list(a)
+
+
+def _addon_list(a: dict) -> list[str]:
+    """Add-on product scopes excluding the standard observability base."""
+    return [s for s in _scope_list(a) if s != "infra_apm_logs"]
+
+
+def _is_platform_scope(a: dict) -> bool:
+    """3+ add-ons (excluding the standard obs base) = platform-scale engagement."""
+    return len(_addon_list(a)) >= 3
+
+
+# ──────────────────────────────────────────────────────────────────
+# Shape: Defer | Gap-filler | Foundation | Standards-setter | Accelerator
+# ──────────────────────────────────────────────────────────────────
+# Order matters — first match wins. Standards-setter precedes Accelerator
+# (slice 3.7 fix): a centrally-governed broad-scope mature customer should
+# get the "publish a replicable blueprint" diagnosis, not the generic
+# accelerate-decisions one.
+
+def compute_shape(a: dict) -> _Field:
+    dd_status     = a.get("ddStatus")
+    dd_quality    = a.get("ddQuality")
+    replacing     = a.get("replacingTool")
+    mig_vol       = a.get("migVol")
+    capability    = a.get("capability")
+    authority     = a.get("authority")
+    team_count    = a.get("teamCount")
+    scope_addons  = _scope_list(a)
+    sponsor       = a.get("sponsor")
+    urgency       = a.get("urgency")
+    compliance    = a.get("compliance")
+
+    # Defer fires before any other shape. Director+ sponsorship is the
+    # structural gate for IS budget; without it (or a forcing function like
+    # a hard regulatory deadline) the engagement is premature.
+    forcing_function = urgency == "hard" or compliance == "yes"
+
+    if sponsor == "none":
+        return {"value": "Defer", "triggers": [("sponsor", "none")]}
+
+    if sponsor == "engineer" and not forcing_function:
+        return {
+            "value": "Defer",
+            "triggers": [
+                ("sponsor", "engineer"),
+                ("__note__", "no urgency or compliance forcing function"),
+            ],
+        }
+
+    # Wider Defer: manager-level sponsor with single team + no add-ons selected
+    # + no forcing function = the vanity-tooling pattern.
+    if (
+        sponsor == "manager"
+        and team_count == "single"
+        and not scope_addons
+        and not forcing_function
+    ):
+        return {
+            "value": "Defer",
+            "triggers": [
+                ("sponsor", "manager"),
+                ("teamCount", "single"),
+                ("productScope", "obs-only"),
+                ("__note__", "small scope, no urgency or compliance forcing function"),
+            ],
+        }
+
+    # Gap-filler — broken governance or large incumbent migration. Shaped by
+    # the corrective scope, not by greenfield freedom.
+    if dd_quality == "messy" or (replacing == "yes" and mig_vol in {"l", "xl"}):
+        triggers: list[tuple[str, str]] = []
+        if dd_quality == "messy":
+            triggers.append(("ddQuality", "messy"))
+        if replacing == "yes" and mig_vol in {"l", "xl"}:
+            triggers.append(("replacingTool", "yes"))
+            triggers.append(("migVol", mig_vol or ""))
+        return {"value": "Gap-filler", "triggers": triggers}
+
+    if dd_status in ("new", "different_bu") or (dd_quality == "rebuild" and replacing == "no"):
+        triggers = [("ddStatus", dd_status or "")]
+        if dd_quality == "rebuild":
+            triggers.append(("ddQuality", "rebuild"))
+        return {"value": "Foundation", "triggers": triggers}
+
+    # Standards-setter precedes Accelerator (slice 3.7 fix). Centrally-governed
+    # mature customer with broad scope (2+ add-ons) and enterprise/large team
+    # count → they want a replicable blueprint to publish, not just architectural
+    # acceleration. Otherwise a strong-capability mature customer falls through
+    # to Accelerator.
+    if (
+        dd_status == "live"
+        and dd_quality == "good"
+        and authority == "central"
+        and team_count in {"enterprise", "large"}
+        and len([s for s in scope_addons if s != "infra_apm_logs"]) >= 2
+    ):
+        return {
+            "value": "Standards-setter",
+            "triggers": [
+                ("ddStatus", "live"),
+                ("ddQuality", "good"),
+                ("authority", "central"),
+                ("teamCount", team_count or ""),
+                ("productScope", f"{len(scope_addons)}-addons"),
+            ],
+        }
+
+    if dd_status == "live" and dd_quality == "good" and capability == "strong":
+        return {
+            "value": "Accelerator",
+            "triggers": [
+                ("ddStatus", "live"),
+                ("ddQuality", "good"),
+                ("capability", "strong"),
+            ],
+        }
+
+    # Fallback — treat as Foundation but signal low confidence in triggers.
+    return {
+        "value": "Foundation",
+        "triggers": [
+            ("ddStatus", dd_status or "unknown"),
+            ("__fallback__", "shape not cleanly derivable from inputs"),
+        ],
+    }
+
+
+# ──────────────────────────────────────────────────────────────────
+# Motion: IS-delivered | Customer-delivered | Partner-delivered
+# ──────────────────────────────────────────────────────────────────
+# "Motion" replaces the old 4-posture taxonomy (slice 3.7). The 3 motions
+# answer "who actually does the hands-on work" explicitly:
+#   IS-delivered       — IS does the work alongside the customer (high-touch)
+#   Customer-delivered — customer team does the work; IS architects/reviews
+#   Partner-delivered  — delivery partner does the work; IS architects/oversees
+#
+# The old "IS-led" label was overloaded — it meant high-touch-everything for
+# Foundation+limited-capability AND architecture-only-customer-or-partner-
+# executes for high-volume Gap-filler. New motions make the distinction
+# explicit.
+
+def compute_motion(a: dict) -> _Field:
+    dd_status   = a.get("ddStatus")
+    dd_quality  = a.get("ddQuality")
+    replacing   = a.get("replacingTool")
+    mig_vol     = a.get("migVol")
+    capability  = a.get("capability")
+    urgency     = a.get("urgency")
+    authority   = a.get("authority")
+    team_count  = a.get("teamCount")
+
+    # Capability gap dominates — IS must do the hands-on work.
+    if capability == "limited":
+        return {"value": "IS-delivered", "triggers": [("capability", "limited")]}
+
+    # Heavy migration (xl) → Partner-delivered. Slice 3.1 policy: IS is not
+    # scaled for hands-on migration labour at this volume. IS architects the
+    # target state; partner or customer team does the cutover. This precedes
+    # the urgency rule because the no-heavy-HOK policy beats deadline-driven
+    # IS-pairing.
+    if replacing == "yes" and mig_vol == "xl":
+        return {
+            "value": "Partner-delivered",
+            "triggers": [
+                ("replacingTool", "yes"),
+                ("migVol", "xl"),
+                ("__note__", "high-volume migration → IS architects, partner executes"),
+            ],
+        }
+
+    # Moderate migration (l) with non-strong capability — IS pairs hands-on.
+    if replacing == "yes" and mig_vol == "l" and capability != "strong":
+        return {
+            "value": "IS-delivered",
+            "triggers": [
+                ("replacingTool", "yes"),
+                ("migVol", "l"),
+                ("capability", capability or "unknown"),
+            ],
+        }
+
+    # Hard deadline with non-strong capability — IS pairs to meet the date.
+    if urgency == "hard" and capability != "strong":
+        return {
+            "value": "IS-delivered",
+            "triggers": [("urgency", "hard"), ("capability", capability or "unknown")],
+        }
+
+    # Mature healthy deployment + strong capability → customer team does
+    # the work, IS architects and reviews.
+    if capability == "strong" and dd_status == "live" and dd_quality == "good":
+        return {
+            "value": "Customer-delivered",
+            "triggers": [
+                ("capability", "strong"),
+                ("ddStatus", "live"),
+                ("ddQuality", "good"),
+            ],
+        }
+
+    # Enterprise-scale with central authority and capability to scale a pattern
+    # → customer-delivered (they replicate; IS designs).
+    if (
+        team_count in {"enterprise", "large"}
+        and authority == "central"
+        and capability in {"some", "strong"}
+    ):
+        return {
+            "value": "Customer-delivered",
+            "triggers": [
+                ("teamCount", team_count or ""),
+                ("authority", "central"),
+                ("capability", capability or ""),
+            ],
+        }
+
+    # Fallback — assume mature customer-led motion. (If we got here without
+    # a strong signal, the deal probably needs more discovery anyway.)
+    return {
+        "value": "Customer-delivered",
+        "triggers": [("__fallback__", "motion not cleanly derivable; assuming customer-delivered")],
+    }
+
+
+# ──────────────────────────────────────────────────────────────────
+# Binding constraints — ordered list, all that fire (slice 3.7)
+# ──────────────────────────────────────────────────────────────────
+# Returns every constraint that's binding, ordered by priority. Priority is
+# encoded in the order in which constraints are evaluated. Deduplication is
+# by value name (e.g. multi-team can fire twice via different rules; we keep
+# the higher-priority trigger).
+
+def compute_binding_constraints(a: dict) -> list[_Field]:
+    capability    = a.get("capability")
+    urgency       = a.get("urgency")
+    dd_quality    = a.get("ddQuality")
+    compliance    = a.get("compliance")
+    team_count    = a.get("teamCount")
+    authority     = a.get("authority")
+    scope_addons  = _scope_list(a)
+
+    constraints: list[_Field] = []
+    seen: set[str] = set()
+
+    def add(value: str, triggers: list[tuple[str, str]]) -> None:
+        if value in seen:
+            return
+        seen.add(value)
+        constraints.append({"value": value, "triggers": triggers})
+
+    # 1. Capability gap
+    if capability == "limited":
+        add("capability gap", [("capability", "limited")])
+
+    # 2. Deadline
+    if urgency == "hard":
+        add("deadline", [("urgency", "hard")])
+
+    # 3. Governance debt
+    if dd_quality == "messy":
+        add("governance debt", [("ddQuality", "messy")])
+
+    # 4. multi-team (strong signal — explicit multi-BU)
+    if team_count == "large":
+        add("multi-team", [("teamCount", "large")])
+
+    # 5. Regulation
+    if compliance == "yes":
+        add("regulation", [("compliance", "yes")])
+
+    # 6. multi-team (softer — enterprise without central authority)
+    if team_count == "enterprise" and authority != "central":
+        add("multi-team", [("teamCount", "enterprise"), ("authority", authority or "unknown")])
+
+    # 7. Scale (broad add-on scope at enterprise/large team count)
+    if len([s for s in scope_addons if s != "infra_apm_logs"]) >= 3 and team_count in {"enterprise", "large"}:
+        add(
+            "scale",
+            [
+                ("productScope", f"{len(scope_addons)}-addons"),
+                ("teamCount", team_count or ""),
+            ],
+        )
+
+    if not constraints:
+        add("none binding", [("__note__", "engagement is tractable on standard sizing")])
+
+    return constraints
+
+
+# ──────────────────────────────────────────────────────────────────
+# Customer ownership — (shape, motion) base + conditional bullets
+# ──────────────────────────────────────────────────────────────────
+
+_OWNERSHIP_BASE: dict[tuple[str, str], list[str]] = {
+    # Foundation — building the operating model from zero.
+    ("Foundation", "IS-delivered"): [
+        "Commit named engineering capacity to pair with IS for the duration.",
+        "Designate the receiving team that takes ownership at handover.",
+        "Appoint a CMDB / asset-owner role authoritative for service identity.",
+    ],
+    ("Foundation", "Customer-delivered"): [
+        "Stand up a platform team to build and operate the IS-designed pattern.",
+        "Decide on the platform-team broker authority over keys, integrations, patterns.",
+        "Curate CMDB attributes as authoritative source-of-truth for telemetry scoping.",
+    ],
+    ("Foundation", "Partner-delivered"): [
+        "Name the delivery partner and the scope of their build engagement.",
+        "Stand up a platform team to inherit the pattern at partner handover.",
+        "Govern the IS↔partner↔customer triad — IS architects, partner builds, customer operates.",
+    ],
+
+    # Accelerator — mature customer, forward architectural decisions.
+    ("Accelerator", "Customer-delivered"): [
+        "Execution across every workstream — IS does not own the rollout, the platform team does.",
+        "Workstream prioritisation — IS does not own the backlog.",
+        "Cross-team coordination, including any third-party integration partners.",
+        "Exec-level steering so IS judgement stays visible — sessions consumed is a poor proxy for impact, surface architectural calls at exec cadence.",
+    ],
+    ("Accelerator", "IS-delivered"): [
+        "Pair with IS on the specific high-stakes work driving the IS-delivered motion.",
+        "Resource cross-team coordination as IS guidance lands.",
+        "Operate the deployment after each IS-paired phase.",
+    ],
+    ("Accelerator", "Partner-delivered"): [
+        "Name the delivery partner and the workstream they own.",
+        "Govern the IS↔partner↔customer triad — IS advises on architecture, partner executes, customer operates.",
+        "Exec-level steering so partner work stays aligned to IS-validated architecture.",
+    ],
+
+    # Gap-filler — corrective: fix broken governance or migrate from incumbent.
+    ("Gap-filler", "Partner-delivered"): [
+        "Engage a Datadog delivery partner for the cutover — IS is not scaled for heavy hands-on migration at this volume.",
+        "Named decommission owner and audit-trail sign-off for the legacy path.",
+        "Parity sign-off ahead of cutover.",
+        "Govern the IS↔partner↔customer triad — IS architects target state, partner executes, customer operates.",
+    ],
+    ("Gap-filler", "IS-delivered"): [
+        "Named decommission owner and audit-trail sign-off for the legacy path.",
+        "Parity-test sign-off ahead of cutover.",
+        "Change-management ownership for the cutover window.",
+        "Resource the customer side of the IS-paired cutover work.",
+    ],
+    ("Gap-filler", "Customer-delivered"): [
+        "Execute the remediation / migration — IS supplies the target state and reviews.",
+        "Named decommission owner and audit-trail sign-off.",
+        "Cross-team alignment on the new standards.",
+    ],
+
+    # Standards-setter — replicable blueprint; customer/partner scales.
+    ("Standards-setter", "Customer-delivered"): [
+        "Replication ownership across remaining teams after IS hands off the pattern + pilot.",
+        "Internal training and pattern-divergence governance.",
+        "Central authority to govern divergence — without a broker function the pattern won't land; push back before scoping if absent.",
+    ],
+    ("Standards-setter", "Partner-delivered"): [
+        "Name the delivery partner that will replicate the IS-built pattern across teams.",
+        "Govern pattern divergence centrally; route exceptions back to IS via the partner.",
+        "Maintain the pattern over time after the IS engagement closes.",
+    ],
+    ("Standards-setter", "IS-delivered"): [
+        "Re-scope discussion: IS doesn't run per-team rollouts. If the customer wants IS to scale the pattern across teams, the shape should be Accelerator (advisory) or Foundation (with broker authority).",
+        "If keeping IS-delivered: pair on the reference build only; hand off replication to customer or partner.",
+    ],
+}
+
+
+_DEFER_NEXT_STEPS: list[str] = [
+    "For a second opinion before deferring, contact Frédérique Martin Sainte-Agathe (IS management sponsor): frederique.martinsainteagathe@datadoghq.com.",
+    "Customer-led adoption with TAM support — Datadog as a product still delivers value without IS sessions.",
+    "Partner-led delivery if the work is repetitive execution rather than architectural — engage a Datadog partner.",
+    "Revisit IS when a director-or-above champion is named, OR an external forcing function appears (regulatory deadline, compliance audit, hard contract date).",
+]
+
+
+class DeferVerdict(TypedDict):
+    verdict: str
+    what_changes: str
+
+
+def compute_defer_verdict(answers: dict) -> DeferVerdict:
+    """Templated verdict prose for shape=Defer."""
+    sponsor = answers.get("sponsor")
+
+    if sponsor == "none":
+        verdict = (
+            "This is not yet an IS engagement. No champion has been identified at "
+            "the customer, which means there is no budget owner, no internal advocate "
+            "to keep the work moving, and no decision-maker who will defend the "
+            "engagement's value at quarterly review. IS sessions without that anchor "
+            "stall before they start."
+        )
+    elif sponsor == "engineer":
+        verdict = (
+            "This is not yet an IS engagement. Engineer-level sponsorship is a "
+            "signal that the technical team sees value, but IS budget rarely lands "
+            "without director-or-above approval. Without a regulatory deadline or "
+            "compliance pressure forcing exec attention, the deal will stall at "
+            "budget approval or be cut mid-cycle when priorities shift."
+        )
+    elif sponsor == "manager":
+        verdict = (
+            "This is not yet an IS engagement. A director-tier sponsor exists, "
+            "but the combination of small scope (single team, narrow product "
+            "footprint) and no external forcing function is the vanity-tooling "
+            "pattern. The sponsor approves the deal but disengages once it lands "
+            "at the next quarterly priority shift. The commercial completes; the "
+            "work does not get operationalised."
+        )
+    else:
+        verdict = (
+            "This is not yet an IS engagement. The combination of signals suggests "
+            "the engagement will not sustain attention through delivery. Re-scope "
+            "or wait for the conditions below to change."
+        )
+
+    what_changes = (
+        "What would change the picture: a named director-or-above champion willing "
+        "to authorise IS spend, or an external forcing function — regulatory "
+        "deadline, compliance audit, hard contract date — that compels exec "
+        "attention. Either unlocks the budget conversation and the sustained "
+        "stakeholder presence the engagement needs. In the meantime, the customer "
+        "is well-served by Datadog as a product, with TAM support for ongoing "
+        "advisory and a delivery partner for execution-heavy needs. The escalation "
+        "line above is the path if you read this diagnosis differently."
+    )
+
+    return {"verdict": verdict, "what_changes": what_changes}
+
+
+def compute_customer_ownership(a: dict, shape: str, motion: str) -> list[str]:
+    # Defer is a verdict, not an engagement.
+    if shape == "Defer":
+        return list(_DEFER_NEXT_STEPS)
+
+    bullets: list[str] = list(_OWNERSHIP_BASE.get((shape, motion), [
+        "Execution ownership — IS does not run the deployment.",
+        "Prioritisation and cross-team coordination.",
+    ]))
+
+    if a.get("compliance") == "yes":
+        bullets.append("Named security and legal stakeholder from session 1.")
+    if a.get("replacingTool") == "yes" and not any("decommission" in b.lower() for b in bullets):
+        bullets.append("Named decommission owner for the incumbent tool.")
+    if a.get("authority") == "auto" and a.get("teamCount") != "single":
+        bullets.append("Central authority delegated, or rollout will fragment across teams.")
+
+    if _has_security_scope(a):
+        bullets.append("Security ops and identity teams named as stakeholders from session 1.")
+    if _has_dx_scope(a):
+        bullets.append("Frontend / web / mobile teams named as RUM and Synthetics stakeholders; JS instrumentation + browser-side telemetry ownership agreed.")
+    if _has_ai_scope(a):
+        bullets.append("Data science / ML platform team named as stakeholders; LLM Obs telemetry scope and instrumentation pattern agreed before kickoff.")
+    if _has_workflow_scope(a):
+        bullets.append("Platform / DevOps team named as stakeholders for CI-CD and Workflow Automation; GitHub or GitLab admin access secured for the integration.")
+    if _has_finops_scope(a):
+        bullets.append("Finance / FinOps team named as stakeholders; cloud billing integrations enabled and tag-driven cost-allocation strategy agreed before kickoff.")
+    if _is_platform_scope(a):
+        bullets.append("Named category lead per add-on area — platform-scale expansion is too broad for a single owner; appoint a category accountable per workstream before kickoff.")
+
+    topos = _topology_list(a)
+    if "multi-cloud" in topos:
+        bullets.append("Named cloud-platform lead per cloud — IAM and integration accounts owned per provider.")
+    if "sovereign" in topos:
+        bullets.append("Data residency + DD site selection sign-off before any agent install.")
+    if "gpu-aas" in topos:
+        bullets.append("AI/HPC telemetry scope agreed — LLM Obs surface, GPU metrics, custom workload identification.")
+    if "byoc" in topos:
+        bullets.append("Customer owns install + version-upgrade cadence; agent rollout cadence aligned to their release cycle.")
+    if "hybrid" in topos:
+        bullets.append("Dual-deployment plumbing — cloud agent + on-prem agent or bridge — and the bridge owner named.")
+
+    return bullets
+
+
+# ──────────────────────────────────────────────────────────────────
+# Triggers — consolidated audit trail
+# ──────────────────────────────────────────────────────────────────
+
+def _build_triggers(
+    shape: _Field, motion: _Field, constraints: list[_Field],
+) -> list[Trigger]:
+    by_signal: dict[tuple[str, str], list[str]] = {}
+
+    def add(field_value: _Field, prefix: str) -> None:
+        for signal, value in field_value["triggers"]:
+            if signal.startswith("__"):
+                continue
+            by_signal.setdefault((signal, value), []).append(f"{prefix}:{field_value['value']}")
+
+    add(shape, "shape")
+    add(motion, "motion")
+    for c in constraints:
+        add(c, "constraint")
+
+    return [
+        {"signal": sig, "value": val, "contributed_to": contribs}
+        for (sig, val), contribs in by_signal.items()
+    ]
+
+
+# ──────────────────────────────────────────────────────────────────
+# Delivery plan — shape-aware phase template with add-on injection
+# ──────────────────────────────────────────────────────────────────
+# Surfaced when sessions exceed the display cap (120). Replaces the generic
+# "Multi-phase, ~30-60 sessions per SOW" line with an actual phase
+# breakdown. Phase counts are heuristic (calibration pending) but
+# shape-and-scope aware so the AE gets a defensible structure to discuss.
+
+
+class Phase(TypedDict):
+    name: str
+    brief: str
+    sessions_min: int
+    sessions_max: int
+
+
+# Foundation: stand up the operating model from zero.
+_FOUNDATION_PHASES: list[Phase] = [
+    {"name": "Discovery & architecture", "brief": "CMDB ownership, tagging strategy, broker authority, target architecture", "sessions_min": 8, "sessions_max": 12},
+    {"name": "Core observability build", "brief": "Infra, APM, Logs paired with engineers; baseline dashboards and monitors", "sessions_min": 15, "sessions_max": 25},
+]
+_FOUNDATION_HANDOVER: Phase = {
+    "name": "Handover & standards adoption",
+    "brief": "Receiving team takes ownership of the IS-built pattern; documentation; operational readiness review",
+    "sessions_min": 8,
+    "sessions_max": 12,
+}
+
+# Gap-filler: corrective, lifecycle-bounded.
+_GAP_FILLER_PHASES: list[Phase] = [
+    {"name": "Audit & parity criteria", "brief": "Current-state inventory, gap analysis, formal parity criteria for cutover sign-off", "sessions_min": 5, "sessions_max": 10},
+    {"name": "Target-state design", "brief": "IS-designed target architecture, migration sequencing, instrumentation patterns", "sessions_min": 8, "sessions_max": 12},
+    {"name": "Cutover validation", "brief": "Pilot workstream cutover with IS gating; parity sign-off; runbook hardening", "sessions_min": 10, "sessions_max": 20},
+]
+_GAP_FILLER_DECOMMISSION: Phase = {
+    "name": "Decommission",
+    "brief": "Incumbent retirement; audit-trail sign-off; ownership transfer",
+    "sessions_min": 5,
+    "sessions_max": 10,
+}
+
+# Accelerator: continuous advisory, customer-paced.
+_ACCELERATOR_PHASES: list[Phase] = [
+    {"name": "Discovery & priorities", "brief": "Review existing architecture; identify the architectural decisions in flight; agree review cadence", "sessions_min": 3, "sessions_max": 5},
+    {"name": "Continuous architectural review", "brief": "Per-workstream advisory; proposals; written assessments at exec cadence", "sessions_min": 10, "sessions_max": 20},
+]
+
+# Standards-setter: design pattern + pilot; customer/partner replicates.
+_STANDARDS_SETTER_PHASES: list[Phase] = [
+    {"name": "Pattern design", "brief": "Reference architecture, divergence governance, broker authority model", "sessions_min": 8, "sessions_max": 12},
+    {"name": "Pilot build", "brief": "First-instance implementation paired with customer team or named partner", "sessions_min": 10, "sessions_max": 18},
+    {"name": "Documentation & training", "brief": "Pattern documentation, training materials, divergence-governance handover", "sessions_min": 5, "sessions_max": 10},
+]
+
+
+def _addon_phase(addon: str, shape: str) -> Phase | None:
+    """Per-addon phase, sized differently for build-heavy shapes (Foundation,
+    Gap-filler) vs advisory shapes (Accelerator, Standards-setter)."""
+    build_sized = shape in {"Foundation", "Gap-filler"}
+    if addon == "dx":
+        if build_sized:
+            return {"name": "Digital Experience telemetry", "brief": "RUM and Synthetics instrumentation, frontend pairing", "sessions_min": 10, "sessions_max": 15}
+        return {"name": "DX architectural review", "brief": "RUM/Synthetics pattern review, frontend-team pairing cadence", "sessions_min": 4, "sessions_max": 6}
+    if addon == "security":
+        if build_sized:
+            return {"name": "Security telemetry", "brief": "CSPM, ASM, SDS, Cloud SIEM; IAM patterns; security-ops stakeholder onboarding", "sessions_min": 15, "sessions_max": 22}
+        return {"name": "Security architecture review", "brief": "CSPM/ASM/SDS pattern review, security-ops + identity pairing", "sessions_min": 5, "sessions_max": 8}
+    if addon == "ai":
+        if build_sized:
+            return {"name": "AI / LLM workload telemetry", "brief": "LLM Obs, GPU metrics, custom workload identification, data-science-team pairing", "sessions_min": 12, "sessions_max": 20}
+        return {"name": "AI workload advisory", "brief": "LLM Obs pattern review, GPU metric strategy, ML-team pairing", "sessions_min": 5, "sessions_max": 8}
+    if addon == "workflow":
+        if build_sized:
+            return {"name": "Workflow & CI-CD integration", "brief": "CI Visibility, Workflow Automation, Bits AI, platform/DevOps onboarding", "sessions_min": 10, "sessions_max": 15}
+        return {"name": "Workflow architectural review", "brief": "CI-CD and Bits AI integration pattern, DevOps pairing", "sessions_min": 4, "sessions_max": 6}
+    if addon == "finops":
+        if build_sized:
+            return {"name": "Cloud Cost Management (CCM) onboarding", "brief": "AWS / GCP / Azure billing integrations, cost-allocation tagging, FinOps stakeholder onboarding", "sessions_min": 8, "sessions_max": 12}
+        return {"name": "FinOps advisory", "brief": "CCM pattern review, cost-allocation tagging strategy, FinOps-team pairing", "sessions_min": 3, "sessions_max": 5}
+    return None
+
+
+def compute_delivery_phases(answers: dict, shape: str) -> list[Phase]:
+    """Build a shape-aware delivery plan with add-on phases injected based on
+    productScope. Defer returns an empty list (verdict, not engagement)."""
+    if shape == "Defer":
+        return []
+
+    addons = _addon_list(answers)
+
+    if shape == "Foundation":
+        phases = list(_FOUNDATION_PHASES)
+        for a in addons:
+            p = _addon_phase(a, shape)
+            if p:
+                phases.append(p)
+        phases.append(_FOUNDATION_HANDOVER)
+        return phases
+
+    if shape == "Gap-filler":
+        phases = list(_GAP_FILLER_PHASES)
+        for a in addons:
+            p = _addon_phase(a, shape)
+            if p:
+                phases.append(p)
+        phases.append(_GAP_FILLER_DECOMMISSION)
+        return phases
+
+    if shape == "Accelerator":
+        phases = list(_ACCELERATOR_PHASES)
+        for a in addons:
+            p = _addon_phase(a, shape)
+            if p:
+                phases.append(p)
+        return phases
+
+    if shape == "Standards-setter":
+        phases = list(_STANDARDS_SETTER_PHASES)
+        for a in addons:
+            p = _addon_phase(a, shape)
+            if p:
+                phases.append(p)
+        return phases
+
+    return []
+
+
+def phases_total_range(phases: list[Phase]) -> tuple[int, int]:
+    """Sum the per-phase ranges to give an overall total range. Used for the
+    AE's SOW templating; still heuristic and labelled as such."""
+    return (
+        sum(p["sessions_min"] for p in phases),
+        sum(p["sessions_max"] for p in phases),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────
+# Public entrypoint
+# ──────────────────────────────────────────────────────────────────
+
+def diagnose(answers: dict) -> Diagnosis:
+    """Return the full structured diagnosis. Deterministic — same answers
+    in, same diagnosis out. No external calls."""
+    shape = compute_shape(answers)
+    motion = compute_motion(answers)
+    constraints = compute_binding_constraints(answers)
+    triggers = _build_triggers(shape, motion, constraints)
+    ownership = compute_customer_ownership(answers, shape["value"], motion["value"])
+
+    return {
+        "shape": shape,
+        "motion": motion,
+        "binding_constraints": constraints,
+        "triggers": triggers,
+        "customer_ownership": ownership,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────
+# AE-facing service motion label
+# ──────────────────────────────────────────────────────────────────
+
+_SERVICE_MOTION: dict[tuple[str, str], str] = {
+    ("Foundation",       "IS-delivered"):       "HOK / Hands-on-Keyboard",
+    ("Foundation",       "Customer-delivered"): "Team Onboarding & Enablement",
+    ("Foundation",       "Partner-delivered"):  "HOK / Hands-on-Keyboard",
+    ("Accelerator",      "IS-delivered"):       "HOK / Hands-on-Keyboard",
+    ("Accelerator",      "Customer-delivered"): "Consultative / Advisory",
+    ("Accelerator",      "Partner-delivered"):  "Consultative / Advisory",
+    ("Gap-filler",       "IS-delivered"):       "HOK / Hands-on-Keyboard",
+    ("Gap-filler",       "Customer-delivered"): "Consultative / Advisory",
+    ("Gap-filler",       "Partner-delivered"):  "Migration Services",
+    ("Standards-setter", "IS-delivered"):       "Resident Architect",
+    ("Standards-setter", "Customer-delivered"): "Consultative / Advisory",
+    ("Standards-setter", "Partner-delivered"):  "Consultative / Advisory",
+}
+
+
+def to_service_motion(shape: str, motion: str) -> str:
+    """Map internal shape + motion to the AE-facing service motion label."""
+    if shape == "Defer":
+        return "Discovery / Consultative First"
+    return _SERVICE_MOTION.get((shape, motion), "Consultative / Advisory")
+
+
+# ──────────────────────────────────────────────────────────────────
+# Commercial footer helpers — consumed by Scope_an_opportunity.py
+# ──────────────────────────────────────────────────────────────────
+
+def package_label(s_max: int | None) -> str:
+    """Map the v1 session-estimate upper bound to a package name. Heuristic;
+    tune as calibration data accrues."""
+    if s_max is None:
+        return "Resolve sponsor blocker first"
+    if s_max <= 30:
+        return "Starter"
+    if s_max <= 60:
+        return "Standard"
+    if s_max <= 100:
+        return "Enterprise"
+    return "Multi-phase"
