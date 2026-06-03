@@ -28,7 +28,7 @@ export function ReviewScreen() {
         <div>
           <p className="text-sm text-slate-500 mb-2">Contracted products</p>
           <div className="flex flex-wrap gap-2">
-            {sfData.ddProducts.map((p) => <Badge key={p} variant="secondary">{p}</Badge>)}
+            {sfData.ddProducts.map((p: string) => <Badge key={p} variant="secondary">{p}</Badge>)}
           </div>
         </div>
       )}

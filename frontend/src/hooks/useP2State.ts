@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SfData } from '@shared/api-types'
+import type { SfData } from '@/api-types'
 
 interface P2State {
   sfData: SfData | null

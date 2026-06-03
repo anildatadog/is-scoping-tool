@@ -3,7 +3,7 @@ import type {
   DiagnoseRequest, DiagnoseResponse,
   ProseRequest, ProseResponse,
   MotionsResponse, EstimateRequest, EstimateResponse,
-} from '@shared/api-types'
+} from '@/api-types'
 
 const BASE = import.meta.env.VITE_BACKEND_URL ?? 'https://is-scoping-backend-151745717948.us-central1.run.app'
 

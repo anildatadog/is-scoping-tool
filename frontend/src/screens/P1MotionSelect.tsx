@@ -4,6 +4,7 @@ import { api } from '@/api/client'
 import { useToken } from '../App'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import type { Motion } from '@/api-types'
 
 export function P1MotionSelect() {
   const nav = useNavigate()
@@ -23,7 +24,7 @@ export function P1MotionSelect() {
         <p className="text-slate-500 mt-1">Pick the motion that best matches their ask. Not sure? Use the full scope flow.</p>
       </div>
       <div className="space-y-3">
-        {motions && Object.entries(motions).map(([key, m]) => (
+        {motions && (Object.entries(motions) as [string, Motion][]).map(([key, m]) => (
           <Card key={key} className="cursor-pointer hover:shadow-md transition-shadow">
             <CardContent className="p-4 flex items-center gap-4">
               <span className="text-2xl">{m.icon}</span>
