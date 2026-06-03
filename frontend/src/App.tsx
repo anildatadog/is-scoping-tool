@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { createContext, useContext } from 'react'
 import { useAuth } from './auth/useAuth'
+import ddLogo from './assets/dd_logo_h_rgb.svg'
 import { SignInScreen } from './screens/SignInScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { P1MotionSelect } from './screens/P1MotionSelect'
@@ -23,14 +24,47 @@ export default function App() {
 
   return (
     <AuthCtx.Provider value={{ token: token!, logout }}>
-      <div className="min-h-screen bg-slate-50">
-        <header className="border-b bg-white px-6 py-3 flex items-center justify-between">
-          <span className="font-semibold text-slate-800">🧭 IS Scoping Tool</span>
-          <button onClick={logout} className="text-sm text-slate-500 hover:text-slate-800">
+      <div style={{ minHeight: '100vh', background: 'var(--dd-bg)' }}>
+        <header style={{
+          background: 'white',
+          borderBottom: '1px solid var(--dd-border)',
+          padding: '0 24px',
+          height: '52px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          boxShadow: '0 1px 0 var(--dd-border)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img src={ddLogo} alt="Datadog" style={{ height: '22px', width: 'auto' }} />
+            <div style={{
+              width: '1px', height: '18px',
+              background: 'var(--dd-border)',
+            }} />
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151', letterSpacing: '-0.01em' }}>
+              IS Scoping
+            </span>
+          </div>
+          <button
+            onClick={logout}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--dd-border)',
+              borderRadius: '6px',
+              padding: '5px 12px',
+              fontSize: '12px',
+              color: '#6b7280',
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
             Sign out
           </button>
         </header>
-        <main className="max-w-3xl mx-auto px-4 py-8">
+        <main style={{ maxWidth: '820px', margin: '0 auto', padding: '32px 24px' }}>
           <Routes>
             <Route path="/" element={<HomeScreen />} />
             <Route path="/estimate" element={<P1MotionSelect />} />

@@ -15,9 +15,9 @@ MOTIONS: dict[str, dict] = {
         "icon":  "💬",
     },
     "onboarding": {
-        "label": "Team Onboarding & Enablement",
-        "ask":   '"Teach our teams and help them start doing it"',
-        "desc":  "Datadog works with customer teams directly to onboard and build starter assets together.",
+        "label": "Guided Delivery",
+        "ask":   '"We have a project — work with us to deliver it"',
+        "desc":  "Specific project, defined scope, clear end state. IS guides and reviews while the customer team executes.",
         "icon":  "👥",
     },
     "hok": {
@@ -34,8 +34,8 @@ MOTIONS: dict[str, dict] = {
     },
     "resident_architect": {
         "label": "Resident Architect",
-        "ask":   '"Stay with us for multiple months and guide execution"',
-        "desc":  "Customer needs embedded IS support across multiple months. Sized by days/week × months.",
+        "ask":   '"Stay embedded with us across multiple months — we need an IS architect on tap"',
+        "desc":  "No fixed scope, open-ended across multiple workstreams. IS is your go-to architect for the quarter. Sized by days/week × months.",
         "icon":  "🏗️",
     },
     "discovery": {

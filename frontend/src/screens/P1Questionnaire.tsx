@@ -3,10 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useToken } from '../App'
 import { useP1State } from '@/hooks/useP1State'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Checkbox } from '@/components/ui/checkbox'
 
 type Opt = { v: string; l: string }
 type Q = { id: string; q: string; kind: string; opts: Opt[]; show: () => boolean }
@@ -24,7 +20,71 @@ function getQuestions(motion: string): Q[] {
     { id: 'p1_deadline', q: 'Is there a hard external deadline?', kind: 'radio', show: () => motion !== 'discovery',
       opts: [{ v: 'hard', l: 'Yes — within 3 months' }, { v: 'target', l: 'Target date (flexible)' }, { v: 'flex', l: 'No hard deadline' }] },
   ]
-  return all.filter((q) => q.show())
+  return all.filter(q => q.show())
+}
+
+function OptionRow({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '11px 14px',
+        borderRadius: '8px',
+        border: `1px solid ${selected ? 'var(--dd-purple)' : 'var(--dd-border)'}`,
+        background: selected ? 'var(--dd-purple-light)' : 'white',
+        cursor: 'pointer',
+        transition: 'all 0.1s ease',
+        userSelect: 'none',
+      }}
+    >
+      <div style={{
+        width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0,
+        border: `2px solid ${selected ? 'var(--dd-purple)' : '#d1d5db'}`,
+        background: selected ? 'var(--dd-purple)' : 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {selected && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'white' }} />}
+      </div>
+      <span style={{ fontSize: '14px', color: selected ? 'var(--dd-purple-dark)' : 'var(--dd-text)', fontWeight: selected ? 500 : 400 }}>
+        {children}
+      </span>
+    </div>
+  )
+}
+
+function CheckRow({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '10px 14px',
+        borderRadius: '8px',
+        border: `1px solid ${selected ? 'var(--dd-purple)' : 'var(--dd-border)'}`,
+        background: selected ? 'var(--dd-purple-light)' : 'white',
+        cursor: 'pointer',
+        transition: 'all 0.1s ease',
+        userSelect: 'none',
+      }}
+    >
+      <div style={{
+        width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0,
+        border: `2px solid ${selected ? 'var(--dd-purple)' : '#d1d5db'}`,
+        background: selected ? 'var(--dd-purple)' : 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {selected && (
+          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+            <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </div>
+      <span style={{ fontSize: '14px', color: selected ? 'var(--dd-purple-dark)' : 'var(--dd-text)', fontWeight: selected ? 500 : 400 }}>
+        {children}
+      </span>
+    </div>
+  )
 }
 
 export function P1Questionnaire() {
@@ -32,54 +92,93 @@ export function P1Questionnaire() {
   const nav = useNavigate()
   const token = useToken()
   const { answers, setAnswer } = useP1State()
-
   const { data: motions } = useQuery({ queryKey: ['phase1Motions'], queryFn: () => api.phase1Motions(token) })
+
   const questions = getQuestions(motion)
-  const allAnswered = questions.every((q) => q.kind === 'multiselect' ? true : !!answers[q.id])
+  const allAnswered = questions.every(q => q.kind === 'multiselect' ? true : !!answers[q.id])
 
   return (
-    <div className="space-y-8">
-      <div>
-        <button onClick={() => nav('/estimate')} className="text-sm text-slate-500 hover:text-slate-800 mb-4 block">← Change motion</button>
-        <h1 className="text-2xl font-bold tracking-tight">{motions?.[motion]?.label ?? motion}</h1>
-        <p className="text-slate-500 mt-1">Answer these questions to get a rough day range.</p>
+    <div>
+      <button
+        onClick={() => nav('/estimate')}
+        style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          color: 'var(--dd-text-muted)', fontSize: '13px', padding: '0 0 16px 0',
+          display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 500,
+        }}
+      >
+        ← Change motion
+      </button>
+
+      <div style={{ marginBottom: '28px' }}>
+        <h1 style={{ fontSize: '22px', fontWeight: 700, margin: '0 0 4px 0', letterSpacing: '-0.3px' }}>
+          {motions?.[motion]?.label ?? motion}
+        </h1>
+        <p style={{ color: 'var(--dd-text-muted)', fontSize: '14px', margin: 0 }}>
+          Answer these questions to get a rough day range.
+        </p>
       </div>
 
-      {questions.map((q) => (
-        <div key={q.id} className="space-y-3">
-          <Label className="text-base font-medium">{q.q}</Label>
-          {q.kind === 'multiselect' ? (
-            <div className="space-y-2">
-              {q.opts.map((o) => (
-                <div key={o.v} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`${q.id}-${o.v}`}
-                    checked={((answers[q.id] as string[]) || []).includes(o.v)}
-                    onCheckedChange={(checked) => {
-                      const curr = (answers[q.id] as string[]) || []
-                      setAnswer(q.id, checked ? [...curr, o.v] : curr.filter((x) => x !== o.v))
-                    }}
-                  />
-                  <Label htmlFor={`${q.id}-${o.v}`} className="font-normal cursor-pointer">{o.l}</Label>
-                </div>
-              ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {questions.map(q => (
+          <div key={q.id} style={{ background: 'white', border: '1px solid var(--dd-border)', borderRadius: '10px', padding: '18px 20px', boxShadow: 'var(--dd-shadow)' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--dd-text)', marginBottom: '12px' }}>
+              {q.q}
             </div>
-          ) : (
-            <RadioGroup value={(answers[q.id] as string) || ''} onValueChange={(v) => setAnswer(q.id, v)} className="space-y-2">
-              {q.opts.map((o) => (
-                <div key={o.v} className="flex items-center gap-2">
-                  <RadioGroupItem value={o.v} id={`${q.id}-${o.v}`} />
-                  <Label htmlFor={`${q.id}-${o.v}`} className="font-normal cursor-pointer">{o.l}</Label>
-                </div>
-              ))}
-            </RadioGroup>
-          )}
-        </div>
-      ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {q.opts.map(o => {
+                const isMulti = q.kind === 'multiselect'
+                const curr = (answers[q.id] as string[] | string | undefined)
+                const selected = isMulti
+                  ? ((curr as string[]) || []).includes(o.v)
+                  : curr === o.v
 
-      <Button disabled={!allAnswered} onClick={() => nav(`/estimate/${motion}/result`)} className="w-full">
-        Get estimate →
-      </Button>
+                if (isMulti) {
+                  return (
+                    <CheckRow
+                      key={o.v}
+                      selected={selected}
+                      onClick={() => {
+                        const list = (curr as string[]) || []
+                        setAnswer(q.id, selected ? list.filter(x => x !== o.v) : [...list, o.v])
+                      }}
+                    >
+                      {o.l}
+                    </CheckRow>
+                  )
+                }
+                return (
+                  <OptionRow key={o.v} selected={selected} onClick={() => setAnswer(q.id, o.v)}>
+                    {o.l}
+                  </OptionRow>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: '24px' }}>
+        <button
+          disabled={!allAnswered}
+          onClick={() => nav(`/estimate/${motion}/result`)}
+          style={{
+            width: '100%',
+            background: allAnswered ? 'var(--dd-purple)' : '#e5e7eb',
+            color: allAnswered ? 'white' : '#9ca3af',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '12px',
+            fontSize: '14px',
+            fontWeight: 600,
+            cursor: allAnswered ? 'pointer' : 'not-allowed',
+            transition: 'background 0.15s ease',
+            boxShadow: allAnswered ? '0 1px 3px rgba(99,44,166,0.25)' : 'none',
+          }}
+        >
+          Get estimate →
+        </button>
+      </div>
     </div>
   )
 }

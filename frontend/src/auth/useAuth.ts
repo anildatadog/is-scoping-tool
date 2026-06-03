@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react'
 
 const TOKEN_KEY = 'goog_id_token'
+const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS_AUTH === 'true'
+const DEV_TOKEN = 'local-dev-token'
 
 export function useAuth() {
   const [token, setToken] = useState<string | null>(
-    () => sessionStorage.getItem(TOKEN_KEY)
+    () => DEV_BYPASS ? DEV_TOKEN : sessionStorage.getItem(TOKEN_KEY)
   )
 
   const login = useCallback((credential: string) => {
