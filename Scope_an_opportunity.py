@@ -616,6 +616,19 @@ def render_result() -> None:
     shape = diag["shape"]["value"]
     is_defer = shape == "Defer"
 
+    # Service motion label — shown for all engagement types including Defer
+    service_motion = to_service_motion(shape, diag["motion"]["value"])
+    st.caption(f"**Service motion:** {service_motion}")
+
+    stated_motion = answers.get("_p1_stated_motion")
+    if stated_motion and stated_motion != "discovery":
+        stated_label = MOTIONS[stated_motion]["label"]
+        if stated_label != service_motion:
+            st.warning(
+                f"Quick estimate used **{stated_label}**, but diagnostic signals "
+                f"point to **{service_motion}**. Review before sending a proposal."
+            )
+
     # Headline prose: Defer uses a templated verdict; everything else routes
     # through the LLM prose layer.
     if is_defer:
