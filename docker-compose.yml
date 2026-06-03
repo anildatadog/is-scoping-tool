@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Snowflake — provide via: docker compose --env-file .env.local up
+      - SNOWFLAKE_ACCOUNT=${SNOWFLAKE_ACCOUNT}
+      - SNOWFLAKE_PAT=${SNOWFLAKE_PAT}
+      - SNOWFLAKE_USER=${SNOWFLAKE_USER}
+      - SNOWFLAKE_DATABASE=${SNOWFLAKE_DATABASE:-REPORTING}
+      - SNOWFLAKE_WAREHOUSE=${SNOWFLAKE_WAREHOUSE:-AD_HOC_DEVELOPMENT_XSMALL_WAREHOUSE}
+      # ANTHROPIC_API_KEY — leave blank locally if you don't need prose generation
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # GOOGLE_CLIENT_ID intentionally absent — disables auth middleware for local dev
+    volumes:
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
