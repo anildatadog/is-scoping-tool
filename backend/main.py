@@ -38,7 +38,7 @@ async def verify_google_token(request: Request, call_next):
     Rejects non-@datadoghq.com accounts with 403.
     """
     client_id = os.environ.get("GOOGLE_CLIENT_ID")
-    if not client_id or request.url.path == "/health":
+    if not client_id or request.url.path == "/health" or request.method == "OPTIONS":
         return await call_next(request)
 
     auth = request.headers.get("Authorization", "")
