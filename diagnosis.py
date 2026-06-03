@@ -745,6 +745,33 @@ def diagnose(answers: dict) -> Diagnosis:
 
 
 # ──────────────────────────────────────────────────────────────────
+# AE-facing service motion label
+# ──────────────────────────────────────────────────────────────────
+
+_SERVICE_MOTION: dict[tuple[str, str], str] = {
+    ("Foundation",       "IS-delivered"):       "HOK / Hands-on-Keyboard",
+    ("Foundation",       "Customer-delivered"): "Team Onboarding & Enablement",
+    ("Foundation",       "Partner-delivered"):  "HOK / Hands-on-Keyboard",
+    ("Accelerator",      "IS-delivered"):       "HOK / Hands-on-Keyboard",
+    ("Accelerator",      "Customer-delivered"): "Consultative / Advisory",
+    ("Accelerator",      "Partner-delivered"):  "Consultative / Advisory",
+    ("Gap-filler",       "IS-delivered"):       "HOK / Hands-on-Keyboard",
+    ("Gap-filler",       "Customer-delivered"): "Consultative / Advisory",
+    ("Gap-filler",       "Partner-delivered"):  "Migration Services",
+    ("Standards-setter", "IS-delivered"):       "Resident Architect",
+    ("Standards-setter", "Customer-delivered"): "Consultative / Advisory",
+    ("Standards-setter", "Partner-delivered"):  "Consultative / Advisory",
+}
+
+
+def to_service_motion(shape: str, motion: str) -> str:
+    """Map internal shape + motion to the AE-facing service motion label."""
+    if shape == "Defer":
+        return "Discovery / Consultative First"
+    return _SERVICE_MOTION.get((shape, motion), "Consultative / Advisory")
+
+
+# ──────────────────────────────────────────────────────────────────
 # Commercial footer helpers — consumed by Scope_an_opportunity.py
 # ──────────────────────────────────────────────────────────────────
 
