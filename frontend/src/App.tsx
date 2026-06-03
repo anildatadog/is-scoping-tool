@@ -1,122 +1,49 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { createContext, useContext } from 'react'
+import { useAuth } from './auth/useAuth'
+import { SignInScreen } from './screens/SignInScreen'
+import { HomeScreen } from './screens/HomeScreen'
+import { P1MotionSelect } from './screens/P1MotionSelect'
+import { P1Questionnaire } from './screens/P1Questionnaire'
+import { P1Result } from './screens/P1Result'
+import { SearchScreen } from './screens/SearchScreen'
+import { ReviewScreen } from './screens/ReviewScreen'
+import { QuestionnaireScreen } from './screens/QuestionnaireScreen'
+import { ResultScreen } from './screens/ResultScreen'
 
-function App() {
-  const [count, setCount] = useState(0)
+export const AuthCtx = createContext<{ token: string; logout: () => void }>({
+  token: '', logout: () => {},
+})
+export const useToken = () => useContext(AuthCtx).token
+
+export default function App() {
+  const { token, login, logout, isAuthenticated } = useAuth()
+
+  if (!isAuthenticated) return <SignInScreen onLogin={login} />
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <AuthCtx.Provider value={{ token: token!, logout }}>
+      <div className="min-h-screen bg-slate-50">
+        <header className="border-b bg-white px-6 py-3 flex items-center justify-between">
+          <span className="font-semibold text-slate-800">🧭 IS Scoping Tool</span>
+          <button onClick={logout} className="text-sm text-slate-500 hover:text-slate-800">
+            Sign out
+          </button>
+        </header>
+        <main className="max-w-3xl mx-auto px-4 py-8">
+          <Routes>
+            <Route path="/" element={<HomeScreen />} />
+            <Route path="/estimate" element={<P1MotionSelect />} />
+            <Route path="/estimate/:motion" element={<P1Questionnaire />} />
+            <Route path="/estimate/:motion/result" element={<P1Result />} />
+            <Route path="/scope" element={<SearchScreen />} />
+            <Route path="/scope/review" element={<ReviewScreen />} />
+            <Route path="/scope/questions" element={<QuestionnaireScreen />} />
+            <Route path="/scope/result" element={<ResultScreen />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+      </div>
+    </AuthCtx.Provider>
   )
 }
-
-export default App
