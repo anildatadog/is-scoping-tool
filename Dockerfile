@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir --upgrade -r requirements.txt \
  && python -c "import streamlit.web.server.starlette.starlette_auth_routes as m; print('streamlit auth routes import OK')" \
  && python -c "import anthropic; print('anthropic', anthropic.__version__)"
 
-COPY Scope_an_opportunity.py diagnosis.py methodologies.py prose.py scoping_doc.py snowflake_lookup.py docker-entrypoint.sh ./
+COPY Scope_an_opportunity.py diagnosis.py methodologies.py phase1.py prose.py scoping_doc.py snowflake_lookup.py docker-entrypoint.sh ./
 COPY pages/ ./pages/
 RUN chmod +x docker-entrypoint.sh
 
