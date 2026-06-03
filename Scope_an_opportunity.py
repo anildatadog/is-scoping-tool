@@ -12,8 +12,10 @@ from diagnosis import (
     diagnose,
     package_label,
     phases_total_range,
+    to_service_motion,
 )
 from methodologies import build_flags, build_next_steps, recommend, visible_questions
+from phase1 import MOTIONS, fast_estimate, merge_p1_seed, p1_visible_questions
 from prose import generate as generate_prose
 from scoping_doc import build as build_scoping_doc
 
@@ -22,6 +24,19 @@ try:
     SNOWFLAKE_AVAILABLE = True
 except Exception:
     SNOWFLAKE_AVAILABLE = False
+
+
+_P1_TO_P2_PRODUCTS = {
+    "obs":      "infra_apm_logs",
+    "dx":       "dx",
+    "security": "security",
+    "ai":       "ai",
+    "finops":   "finops",
+}
+
+
+def _p1_products_to_p2(p1_products: list[str]) -> list[str]:
+    return [_P1_TO_P2_PRODUCTS[p] for p in p1_products if p in _P1_TO_P2_PRODUCTS]
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -56,23 +71,29 @@ if not _email.endswith("@datadoghq.com"):
 
 
 if "screen" not in st.session_state:
-    st.session_state.screen = "search"
+    st.session_state.screen = "home"
     st.session_state.sf_data = None
     st.session_state.answers = {}
     st.session_state.step = 0
     st.session_state.search_results = []
     st.session_state.search_error = None
     st.session_state.prefilled_keys = set()
+    st.session_state.p1_motion = None
+    st.session_state.p1_answers = {}
+    st.session_state.p1_seed = {}
 
 
 def reset_to_search() -> None:
-    st.session_state.screen = "search"
+    st.session_state.screen = "home"
     st.session_state.sf_data = None
     st.session_state.answers = {}
     st.session_state.step = 0
     st.session_state.search_results = []
     st.session_state.search_error = None
     st.session_state.prefilled_keys = set()
+    st.session_state.p1_motion = None
+    st.session_state.p1_answers = {}
+    st.session_state.p1_seed = {}
 
 
 def remaining_questions(answers: dict) -> list[dict]:
@@ -101,17 +122,21 @@ def questionnaire_questions(answers: dict) -> list[dict]:
 
 
 def goto_next_after_search(sf_data: dict | None) -> None:
-    """After SF lookup (or skip), pick the right next screen:
-    - SF prefilled some answers → review screen so the AE can confirm/edit them
-    - Nothing prefilled (skip path) → straight into the questionnaire
+    """After SF lookup (or skip), pick the right next screen.
+
+    If coming from Phase 1 via Refine, p1_seed carries forward Phase 1
+    answers. SF prefill wins on overlap; _p1_stated_motion is always kept.
     """
     st.session_state.sf_data = sf_data
+    p1_seed = st.session_state.get("p1_seed") or {}
+
     if sf_data and sf_data.get("prefill"):
-        st.session_state.answers = dict(sf_data["prefill"])
+        base = dict(sf_data["prefill"])
+        st.session_state.answers = merge_p1_seed(base, p1_seed) if p1_seed else base
         st.session_state.prefilled_keys = set(sf_data["prefill"].keys())
         st.session_state.screen = "review"
     else:
-        st.session_state.answers = {}
+        st.session_state.answers = dict(p1_seed)
         st.session_state.prefilled_keys = set()
         st.session_state.screen = "questionnaire"
     st.session_state.step = 0
@@ -125,6 +150,140 @@ def advance_from_review() -> None:
         st.session_state.screen = "questionnaire"
     else:
         st.session_state.screen = "result"
+
+
+# ──────────────────────────────────────────────────────────────────
+# Phase 1 screens — home, motion select, questionnaire, result
+# ──────────────────────────────────────────────────────────────────
+
+def render_home() -> None:
+    st.title("🧭 IS Scoping Tool")
+    st.caption(f"Signed in as {st.user.email}")
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Quick estimate")
+        st.caption("Pick a motion, answer 3-5 questions, get a rough day range in under 2 minutes.")
+        if st.button("Start quick estimate →", type="primary", use_container_width=True):
+            st.session_state.screen = "p1_motion_select"
+            st.rerun()
+    with col2:
+        st.subheader("Full scope")
+        st.caption("Look up an opportunity in Salesforce, answer diagnostic questions, get a full diagnosis and copy-paste proposal.")
+        if st.button("Look up opportunity →", use_container_width=True):
+            st.session_state.screen = "search"
+            st.rerun()
+
+
+def render_p1_motion_select() -> None:
+    st.title("What does the customer need?")
+    st.caption("Pick the motion that best matches the customer's ask. Not sure? Use the full scope flow instead.")
+
+    for key, m in MOTIONS.items():
+        with st.container(border=True):
+            col_icon, col_text, col_btn = st.columns([1, 8, 2])
+            with col_icon:
+                st.markdown(f"## {m['icon']}")
+            with col_text:
+                st.markdown(
+                    f"**{m['label']}**  \n{m['ask']}  \n"
+                    f"<span style='opacity:.7;font-size:.9em'>{m['desc']}</span>",
+                    unsafe_allow_html=True,
+                )
+            with col_btn:
+                if st.button("Select", key=f"p1_sel_{key}", use_container_width=True):
+                    st.session_state.p1_motion = key
+                    st.session_state.p1_answers = {}
+                    st.session_state.screen = "p1_questionnaire"
+                    st.rerun()
+
+    st.markdown("---")
+    if st.button("← Back"):
+        st.session_state.screen = "home"
+        st.rerun()
+
+
+def render_p1_questionnaire() -> None:
+    motion = st.session_state.p1_motion
+    m = MOTIONS[motion]
+    st.title(f"Quick estimate: {m['label']}")
+    st.caption("Answer these questions to get a rough day range.")
+
+    answers = dict(st.session_state.p1_answers)
+    qs = p1_visible_questions(motion, answers)
+
+    with st.form("p1_form"):
+        for q in qs:
+            opts = q["opts"]
+            if q.get("kind") == "multiselect":
+                answers[q["id"]] = st.multiselect(
+                    q["q"],
+                    options=[o["v"] for o in opts],
+                    format_func=lambda v, _opts=opts: next(o["l"] for o in _opts if o["v"] == v),
+                    default=answers.get(q["id"]) or [],
+                    help=q.get("hint"),
+                )
+            else:
+                current = answers.get(q["id"])
+                idx = next((i for i, o in enumerate(opts) if o["v"] == current), 0)
+                answers[q["id"]] = st.radio(
+                    q["q"],
+                    options=[o["v"] for o in opts],
+                    format_func=lambda v, _opts=opts: next(o["l"] for o in _opts if o["v"] == v),
+                    index=idx,
+                )
+        submitted = st.form_submit_button("Get estimate →", type="primary")
+
+    if submitted:
+        st.session_state.p1_answers = answers
+        st.session_state.screen = "p1_result"
+        st.rerun()
+
+    if st.button("← Change motion"):
+        st.session_state.screen = "p1_motion_select"
+        st.rerun()
+
+
+def render_p1_result() -> None:
+    motion = st.session_state.p1_motion
+    answers = st.session_state.p1_answers
+    m = MOTIONS[motion]
+    est = fast_estimate(motion, answers)
+
+    st.title(f"Phase 1 estimate: {m['label']}")
+    st.caption("First-pass estimate only. Use 'Refine this estimate' for a defensible proposal.")
+
+    if est["days_min"] is None:
+        st.info(est.get("label", "Requires deeper scoping — use the full scope flow."))
+    else:
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Recommended motion", m["label"])
+        c2.metric("Estimated days", f"{est['days_min']}–{est['days_max']}")
+        c3.metric("PM required?", "Yes" if est["pm_required"] else "No")
+        if est["pm_required"]:
+            st.warning("Engagements of this size typically need a Project Manager.")
+
+    st.markdown("---")
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        if st.button("← Edit answers"):
+            st.session_state.screen = "p1_questionnaire"
+            st.rerun()
+    with col_b:
+        if st.button("🔬 Refine this estimate →", type="primary"):
+            st.session_state.p1_seed = {k: v for k, v in {
+                "teamCount":         answers.get("p1_teamCount"),
+                "productScope":      _p1_products_to_p2(answers.get("p1_products") or []) or None,
+                "urgency":           answers.get("p1_deadline"),
+                "migVol":            answers.get("p1_migVol"),
+                "_p1_stated_motion": motion,
+            }.items() if v is not None}
+            st.session_state.screen = "search"
+            st.rerun()
+    with col_c:
+        if st.button("Start over"):
+            reset_to_search()
+            st.rerun()
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -457,6 +616,19 @@ def render_result() -> None:
     shape = diag["shape"]["value"]
     is_defer = shape == "Defer"
 
+    # Service motion label — shown for all engagement types including Defer
+    service_motion = to_service_motion(shape, diag["motion"]["value"])
+    st.caption(f"**Service motion:** {service_motion}")
+
+    stated_motion = answers.get("_p1_stated_motion")
+    if stated_motion and stated_motion != "discovery":
+        stated_label = MOTIONS[stated_motion]["label"]
+        if stated_label != service_motion:
+            st.warning(
+                f"Quick estimate used **{stated_label}**, but diagnostic signals "
+                f"point to **{service_motion}**. Review before sending a proposal."
+            )
+
     # Headline prose: Defer uses a templated verdict; everything else routes
     # through the LLM prose layer.
     if is_defer:
@@ -598,7 +770,15 @@ def render_result() -> None:
 # ──────────────────────────────────────────────────────────────────
 
 screen = st.session_state.screen
-if screen == "search":
+if screen == "home":
+    render_home()
+elif screen == "p1_motion_select":
+    render_p1_motion_select()
+elif screen == "p1_questionnaire":
+    render_p1_questionnaire()
+elif screen == "p1_result":
+    render_p1_result()
+elif screen == "search":
     render_search()
 elif screen == "review":
     render_review()

@@ -441,3 +441,43 @@ def test_package_label_thresholds():
     assert package_label(85) == "Enterprise"
     assert package_label(100) == "Enterprise"
     assert package_label(150) == "Multi-phase"
+
+
+from diagnosis import to_service_motion
+
+
+def test_foundation_is_delivered_maps_to_hok():
+    assert to_service_motion("Foundation", "IS-delivered") == "HOK / Hands-on-Keyboard"
+
+
+def test_foundation_customer_delivered_maps_to_onboarding():
+    assert to_service_motion("Foundation", "Customer-delivered") == "Team Onboarding & Enablement"
+
+
+def test_accelerator_customer_delivered_maps_to_consultative():
+    assert to_service_motion("Accelerator", "Customer-delivered") == "Consultative / Advisory"
+
+
+def test_accelerator_is_delivered_maps_to_hok():
+    assert to_service_motion("Accelerator", "IS-delivered") == "HOK / Hands-on-Keyboard"
+
+
+def test_gap_filler_is_delivered_maps_to_hok():
+    assert to_service_motion("Gap-filler", "IS-delivered") == "HOK / Hands-on-Keyboard"
+
+
+def test_gap_filler_partner_delivered_maps_to_migration():
+    assert to_service_motion("Gap-filler", "Partner-delivered") == "Migration Services"
+
+
+def test_standards_setter_customer_delivered_maps_to_consultative():
+    assert to_service_motion("Standards-setter", "Customer-delivered") == "Consultative / Advisory"
+
+
+def test_standards_setter_is_delivered_maps_to_resident_architect():
+    assert to_service_motion("Standards-setter", "IS-delivered") == "Resident Architect"
+
+
+def test_defer_maps_to_discovery():
+    assert to_service_motion("Defer", "IS-delivered") == "Discovery / Consultative First"
+    assert to_service_motion("Defer", "Customer-delivered") == "Discovery / Consultative First"
