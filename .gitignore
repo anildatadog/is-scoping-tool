@@ -28,3 +28,4 @@ venv/
 
 # Worktrees
 .claude/worktrees/
+.env.local

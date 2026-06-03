@@ -5,9 +5,13 @@ All routes delegate immediately to domain modules.
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 import snowflake_lookup as sf
 from diagnosis import diagnose, to_service_motion
@@ -24,6 +28,36 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def verify_google_token(request: Request, call_next):
+    """Verify Google ID token on every request except /health.
+
+    Skipped entirely when GOOGLE_CLIENT_ID env var is absent (local dev).
+    Rejects non-@datadoghq.com accounts with 403.
+    """
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    if not client_id or request.url.path == "/health":
+        return await call_next(request)
+
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    token = auth[7:]
+    try:
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+        info = id_token.verify_oauth2_token(
+            token, google_requests.Request(), client_id
+        )
+        if not info.get("email", "").endswith("@datadoghq.com"):
+            return JSONResponse({"detail": "Forbidden — Datadog accounts only"}, status_code=403)
+    except Exception:
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    return await call_next(request)
 
 
 # ── Request models ────────────────────────────────────────────────
