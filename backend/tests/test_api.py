@@ -251,3 +251,23 @@ def test_phase1_estimate_resident_architect_no_range():
     assert r.json()["days_min"] is None
     assert r.json()["days_max"] is None
     assert r.json()["pm_required"] is True
+
+
+# ── auth middleware ───────────────────────────────────────────────
+
+def test_unauthenticated_request_returns_401():
+    os.environ["GOOGLE_CLIENT_ID"] = "test-client-id"
+    try:
+        r = client.get("/search?q=acme")
+        assert r.status_code == 401
+    finally:
+        del os.environ["GOOGLE_CLIENT_ID"]
+
+
+def test_health_skips_auth():
+    os.environ["GOOGLE_CLIENT_ID"] = "test-client-id"
+    try:
+        r = client.get("/health")
+        assert r.status_code == 200
+    finally:
+        del os.environ["GOOGLE_CLIENT_ID"]
