@@ -1,19 +1,82 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useP2State } from '@/hooks/useP2State'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Progress } from '@/components/ui/progress'
 import { QUESTIONS } from '@/data/questions'
+
+function OptionRow({ selected, onClick, label, sublabel }: {
+  selected: boolean; onClick: () => void; label: string; sublabel?: string
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: '12px',
+        padding: '11px 14px', borderRadius: '8px', cursor: 'pointer',
+        border: `1px solid ${selected ? 'var(--dd-purple)' : 'var(--dd-border)'}`,
+        background: selected ? 'var(--dd-purple-light)' : 'white',
+        transition: 'all 0.1s ease', userSelect: 'none',
+      }}
+    >
+      <div style={{
+        width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0, marginTop: '2px',
+        border: `2px solid ${selected ? 'var(--dd-purple)' : '#d1d5db'}`,
+        background: selected ? 'var(--dd-purple)' : 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {selected && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'white' }} />}
+      </div>
+      <div>
+        <div style={{ fontSize: '14px', color: selected ? 'var(--dd-purple-dark)' : 'var(--dd-text)', fontWeight: selected ? 500 : 400 }}>
+          {label}
+        </div>
+        {sublabel && <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{sublabel}</div>}
+      </div>
+    </div>
+  )
+}
+
+function CheckRow({ selected, onClick, label, sublabel }: {
+  selected: boolean; onClick: () => void; label: string; sublabel?: string
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: '12px',
+        padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
+        border: `1px solid ${selected ? 'var(--dd-purple)' : 'var(--dd-border)'}`,
+        background: selected ? 'var(--dd-purple-light)' : 'white',
+        transition: 'all 0.1s ease', userSelect: 'none',
+      }}
+    >
+      <div style={{
+        width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0, marginTop: '2px',
+        border: `2px solid ${selected ? 'var(--dd-purple)' : '#d1d5db'}`,
+        background: selected ? 'var(--dd-purple)' : 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {selected && (
+          <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+            <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </div>
+      <div>
+        <div style={{ fontSize: '14px', color: selected ? 'var(--dd-purple-dark)' : 'var(--dd-text)', fontWeight: selected ? 500 : 400 }}>
+          {label}
+        </div>
+        {sublabel && <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{sublabel}</div>}
+      </div>
+    </div>
+  )
+}
 
 export function QuestionnaireScreen() {
   const nav = useNavigate()
   const { answers, setAnswer } = useP2State()
   const [step, setStep] = useState(0)
 
-  const visible = QUESTIONS.filter((q) => q.show(answers))
+  const visible = QUESTIONS.filter(q => q.show(answers))
   const q = visible[step]
   const pct = Math.round((step / visible.length) * 100)
 
@@ -27,57 +90,57 @@ export function QuestionnaireScreen() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-slate-500">Question {step + 1} of {visible.length}</span>
-          <span className="text-sm text-slate-500">{pct}%</span>
+    <div>
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span style={{ fontSize: '13px', color: 'var(--dd-text-muted)', fontWeight: 500 }}>
+            Question {step + 1} of {visible.length}
+          </span>
+          <span style={{ fontSize: '13px', color: 'var(--dd-purple)', fontWeight: 600 }}>{pct}%</span>
         </div>
-        <Progress value={pct} className="h-1" />
+        <div style={{ height: '4px', background: '#e5e7eb', borderRadius: '2px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', background: 'var(--dd-purple)', borderRadius: '2px', width: `${pct}%`, transition: 'width 0.3s ease' }} />
+        </div>
       </div>
 
-      <div className="space-y-4">
-        <Label className="text-lg font-medium">{q.q}</Label>
+      <div style={{ background: 'white', border: '1px solid var(--dd-border)', borderRadius: '10px', padding: '20px', boxShadow: 'var(--dd-shadow)', marginBottom: '16px' }}>
+        <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dd-text)', marginBottom: '14px' }}>{q.q}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {q.opts.map((o: any) => {
+            const isMulti = q.kind === 'multiselect'
+            const curr = answers[q.id]
+            const selected = isMulti ? ((curr as string[]) || []).includes(o.v) : curr === o.v
+            if (isMulti) {
+              return (
+                <CheckRow key={o.v} selected={selected} label={o.l} sublabel={o.s}
+                  onClick={() => {
+                    const list = (curr as string[]) || []
+                    setAnswer(q.id, selected ? list.filter((x: string) => x !== o.v) : [...list, o.v])
+                  }} />
+              )
+            }
+            return <OptionRow key={o.v} selected={selected} label={o.l} sublabel={o.s} onClick={() => setAnswer(q.id, o.v)} />
+          })}
+        </div>
+      </div>
 
-        {q.kind === 'multiselect' ? (
-          <div className="space-y-2">
-            {q.opts.map((o) => (
-              <div key={o.v} className="flex items-start gap-3">
-                <Checkbox
-                  id={`${q.id}-${o.v}`}
-                  checked={((answers[q.id] as string[]) || []).includes(o.v)}
-                  onCheckedChange={(checked) => {
-                    const curr = (answers[q.id] as string[]) || []
-                    setAnswer(q.id, checked ? [...curr, o.v] : curr.filter((x) => x !== o.v))
-                  }}
-                />
-                <div>
-                  <Label htmlFor={`${q.id}-${o.v}`} className="font-normal cursor-pointer">{o.l}</Label>
-                  {o.s && <p className="text-xs text-slate-400">{o.s}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <RadioGroup value={(answers[q.id] as string) || ''} onValueChange={(v) => setAnswer(q.id, v)} className="space-y-3">
-            {q.opts.map((o) => (
-              <div key={o.v} className="flex items-start gap-3">
-                <RadioGroupItem value={o.v} id={`${q.id}-${o.v}`} className="mt-0.5" />
-                <div>
-                  <Label htmlFor={`${q.id}-${o.v}`} className="font-normal cursor-pointer">{o.l}</Label>
-                  {o.s && <p className="text-xs text-slate-400">{o.s}</p>}
-                </div>
-              </div>
-            ))}
-          </RadioGroup>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        {step > 0 && (
+          <button onClick={() => setStep(step - 1)}
+            style={{ background: 'white', color: 'var(--dd-text)', border: '1px solid var(--dd-border)', borderRadius: '7px', padding: '10px 20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+            ← Back
+          </button>
         )}
-      </div>
-
-      <div className="flex gap-3">
-        {step > 0 && <Button variant="outline" onClick={() => setStep(step - 1)}>← Back</Button>}
-        <Button onClick={next} disabled={!hasAnswer} className="flex-1">
+        <button onClick={next} disabled={!hasAnswer}
+          style={{
+            flex: 1, border: 'none', borderRadius: '7px', padding: '10px', fontSize: '13px', fontWeight: 600,
+            background: hasAnswer ? 'var(--dd-purple)' : '#e5e7eb',
+            color: hasAnswer ? 'white' : '#9ca3af',
+            cursor: hasAnswer ? 'pointer' : 'not-allowed',
+            transition: 'background 0.15s ease',
+          }}>
           {step < visible.length - 1 ? 'Next →' : 'See results →'}
-        </Button>
+        </button>
       </div>
     </div>
   )
