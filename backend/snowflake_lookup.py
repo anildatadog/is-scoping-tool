@@ -17,6 +17,7 @@ import snowflake.connector
 
 # Salesforce opp IDs: 15-char case-sensitive (006 + 12) or 18-char with checksum (006 + 15)
 OPP_ID_RE = re.compile(r"^006[a-zA-Z0-9]{12,15}$")
+SNOWFLAKE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
 _REGULATED_KEYWORDS = (
     "financial", "bank", "insurance", "healthcare", "hospital",
@@ -32,6 +33,19 @@ _ENGINEER_KEYWORDS = ("engineer", "architect", "developer", "sre")
 # ──────────────────────────────────────────────────────────────────
 # Connection
 # ──────────────────────────────────────────────────────────────────
+
+def _quote_identifier(name: str) -> str:
+    if SNOWFLAKE_IDENTIFIER_RE.match(name):
+        return name
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _use_warehouse(conn: snowflake.connector.SnowflakeConnection, warehouse: str) -> None:
+    cur = conn.cursor()
+    try:
+        cur.execute(f"USE WAREHOUSE {_quote_identifier(warehouse)}")
+    finally:
+        cur.close()
 
 def _load_private_key() -> bytes | None:
     """Load an RSA private key in DER format for Snowflake key-pair auth.
@@ -77,20 +91,26 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
         warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "AD_HOC_DEVELOPMENT_XSMALL_WAREHOUSE"),
         client_session_keep_alive=True,
     )
+    if role := os.environ.get("SNOWFLAKE_ROLE"):
+        common["role"] = role
     # Auth selection, in priority order:
     #   1. SNOWFLAKE_PAT          -> Programmatic Access Token (Howler default)
     #   2. SNOWFLAKE_PRIVATE_KEY  -> RSA key-pair
     #   3. neither set            -> externalbrowser SSO (local dev only)
     pat = os.environ.get("SNOWFLAKE_PAT")
     if pat:
-        return snowflake.connector.connect(
+        conn = snowflake.connector.connect(
             **common,
             token=pat,
             authenticator="PROGRAMMATIC_ACCESS_TOKEN",
         )
+        _use_warehouse(conn, common["warehouse"])
+        return conn
     private_key = _load_private_key()
     if private_key is not None:
-        return snowflake.connector.connect(**common, private_key=private_key)
+        conn = snowflake.connector.connect(**common, private_key=private_key)
+        _use_warehouse(conn, common["warehouse"])
+        return conn
     # externalbrowser only works when a real browser can be launched — fine for
     # local dev, but in Howler (headless) it hangs forever. Fail loudly so the
     # UI shows a real error instead of "Looking up in Salesforce..." forever.
@@ -99,7 +119,9 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
             "Snowflake auth is unconfigured: set SNOWFLAKE_PAT (preferred) or "
             "SNOWFLAKE_PRIVATE_KEY. externalbrowser SSO cannot run headlessly."
         )
-    return snowflake.connector.connect(**common, authenticator="externalbrowser")
+    conn = snowflake.connector.connect(**common, authenticator="externalbrowser")
+    _use_warehouse(conn, common["warehouse"])
+    return conn
 
 
 def _query(sql: str, params: dict | None = None) -> list[dict]:

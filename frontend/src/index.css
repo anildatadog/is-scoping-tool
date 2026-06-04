@@ -1,9 +1,7 @@
+@import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 /* ── Datadog brand tokens ── */
 :root {
@@ -19,6 +17,57 @@
   --dd-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --dd-shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
   --dd-radius: 10px;
+
+  --background: var(--dd-bg);
+  --foreground: var(--dd-text);
+  --card: var(--dd-surface);
+  --card-foreground: var(--dd-text);
+  --popover: var(--dd-surface);
+  --popover-foreground: var(--dd-text);
+  --primary: var(--dd-purple);
+  --primary-foreground: #ffffff;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #374151;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #f3f4f6;
+  --accent-foreground: #1f2937;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: var(--dd-border);
+  --input: var(--dd-border);
+  --ring: var(--dd-purple);
+  --radius: 10px;
+}
+
+/* ── Tailwind v4 / shadcn theme bridge ── */
+@theme inline {
+  --font-sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 }
 
 /* ── Reset & base ── */
@@ -31,48 +80,6 @@ body {
   color: var(--dd-text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-}
-
-/* ── Tailwind v4 theme bridge ── */
-@theme {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-}
-
-/* ── Override shadcn CSS vars to match DD B design ── */
-:root {
-  --background: var(--dd-bg);
-  --foreground: var(--dd-text);
-  --card: var(--dd-surface);
-  --card-foreground: var(--dd-text);
-  --primary: var(--dd-purple);
-  --primary-foreground: #ffffff;
-  --secondary: #f3f4f6;
-  --secondary-foreground: #374151;
-  --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
-  --border: var(--dd-border);
-  --input: var(--dd-border);
-  --ring: var(--dd-purple);
-  --radius: 10px;
 }
 
 /* ── Cards ── */
