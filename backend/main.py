@@ -210,3 +210,26 @@ def phase1_explain(req: EstimateRequest) -> dict:
     Returns: {why: str, next_steps: list[str]}
     """
     return explain_estimate(req.motion, req.answers)
+
+
+@app.get("/debug/sf")
+def debug_sf(q: str = "haleon") -> dict:
+    """Temporary diagnostic — checks what the service user can actually see."""
+    try:
+        conn = sf._connect()
+        cur = conn.cursor()
+        cur.execute("SELECT CURRENT_USER(), CURRENT_ROLE()")
+        user, role = cur.fetchone()
+        cur.execute("SELECT COUNT(*) FROM REPORTING.GTM.DIM_SFDC_ACCOUNT_RESTRICTED")
+        total = cur.fetchone()[0]
+        pattern = f"%{q.upper()}%"
+        cur.execute(
+            "SELECT ACCOUNT_NAME FROM REPORTING.GTM.DIM_SFDC_ACCOUNT_RESTRICTED "
+            "WHERE UPPER(ACCOUNT_NAME) LIKE %s LIMIT 5",
+            (pattern,)
+        )
+        rows = [r[0] for r in cur.fetchall()]
+        cur.close()
+        return {"user": user, "role": role, "total_accounts_visible": total, "search_results": rows}
+    except Exception as e:
+        return {"error": str(e)}
