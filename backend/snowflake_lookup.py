@@ -106,6 +106,10 @@ def _query(sql: str, params: dict | None = None) -> list[dict]:
     conn = _connect()
     cur = conn.cursor(snowflake.connector.DictCursor)
     try:
+        # PAT auth sometimes doesn't honour the warehouse set in connect() params.
+        # Explicitly setting it here guarantees the session has an active warehouse.
+        wh = os.environ.get("SNOWFLAKE_WAREHOUSE", "AD_HOC_DEVELOPMENT_XSMALL_WAREHOUSE")
+        cur.execute(f"USE WAREHOUSE {wh}")
         cur.execute(sql, params or {})
         return [dict(r) for r in cur.fetchall()]
     finally:
