@@ -16,7 +16,7 @@ from starlette.responses import JSONResponse
 import snowflake_lookup as sf
 from diagnosis import diagnose, to_service_motion
 from methodologies import recommend, build_flags, build_next_steps
-from phase1 import MOTIONS, fast_estimate
+from phase1 import MOTIONS, fast_estimate, explain_estimate
 from prose import generate as generate_prose
 
 app = FastAPI(title="IS Scoping Backend", version="1.0.0")
@@ -183,3 +183,13 @@ def phase1_estimate(req: EstimateRequest) -> dict:
     Architect).
     """
     return fast_estimate(req.motion, req.answers)
+
+
+@app.post("/phase1/explain")
+def phase1_explain(req: EstimateRequest) -> dict:
+    """Rule-based explanation of why the estimate landed where it did,
+    plus motion-specific next steps. Instant — no LLM call.
+
+    Returns: {why: str, next_steps: list[str]}
+    """
+    return explain_estimate(req.motion, req.answers)
