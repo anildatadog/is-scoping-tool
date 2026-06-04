@@ -41,4 +41,7 @@ export const api = {
 
   phase1Estimate: (body: EstimateRequest, token: string) =>
     req<EstimateResponse>('POST', '/phase1/estimate', token, body),
+
+  phase1Explain: (body: EstimateRequest, token: string) =>
+    req<{ why: string; next_steps: string[] }>('POST', '/phase1/explain', token, body),
 }

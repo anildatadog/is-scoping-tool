@@ -155,6 +155,91 @@ def fast_estimate(motion: str, answers: dict) -> dict:
     return {"days_min": d_min, "days_max": d_max, "pm_required": pm_required}
 
 
+def explain_estimate(motion: str, answers: dict) -> dict:
+    """Rule-based explanation of the Phase 1 estimate.
+
+    Returns: {why: str, next_steps: list[str]}
+    No LLM — deterministic from the inputs so it's instant.
+    """
+    team = answers.get("p1_teamCount", "multi")
+    products = answers.get("p1_products") or []
+    readiness = answers.get("p1_readiness", "partial")
+    deadline = answers.get("p1_deadline", "flex")
+    mig_vol = answers.get("p1_migVol")
+
+    # ── Why this range ────────────────────────────────────────────
+
+    team_label = {
+        "single": "a single team", "multi": "2–5 teams",
+        "enterprise": "6–15 teams", "large": "15+ teams",
+    }.get(team, "multiple teams")
+
+    add_ons = [p for p in products if p != "obs"]
+    product_names = {
+        "dx": "Digital Experience (RUM/Synthetics)",
+        "security": "Cloud Security",
+        "ai": "AI/LLM Observability",
+        "finops": "FinOps/CCM",
+    }
+    product_str = (
+        ", ".join(product_names.get(p, p) for p in add_ons)
+        if add_ons else None
+    )
+
+    readiness_note = {
+        "ready": None,
+        "partial": "partial readiness (some instrumentation exists) adds ramp-up sessions",
+        "missing": "starting from zero adds significant ramp-up — expect the higher end of the range",
+    }.get(readiness)
+
+    motion_context = {
+        "consultative": f"Consultative / Advisory for {team_label} sizes by workstream complexity and the number of architectural decisions IS needs to drive.",
+        "onboarding": f"Guided Delivery for {team_label} sizes by how much IS pairs directly with the customer team through execution.",
+        "hok": f"HOK for {team_label} sizes by asset count and complexity — IS does the build work.",
+        "migration": f"Migration Services for {team_label} sizes by source tool inventory and the number of assets to recreate in Datadog.",
+        "resident_architect": f"Resident Architect engagements are sized separately by days/week and duration — this estimate is a placeholder.",
+        "discovery": "Discovery First is a fixed 5–10 day scoping block before a full proposal.",
+    }.get(motion, f"This motion for {team_label}")
+
+    parts = [motion_context]
+    if product_str:
+        parts.append(f"The {product_str} add-on(s) bring additional stakeholder groups and deployment patterns, adding sessions on top of the observability baseline.")
+    if readiness_note:
+        parts.append(f"Note: {readiness_note}.")
+    if mig_vol == "xl":
+        parts.append("500+ assets is a large migration — IS architects and a delivery partner or customer team executes. Scope as a multi-phase programme.")
+    elif mig_vol == "unk":
+        parts.append("Migration asset count is unknown — schedule a tool audit as session 1 to tighten this range significantly.")
+
+    why = " ".join(parts)
+
+    # ── Next steps ────────────────────────────────────────────────
+
+    next_steps: list[str] = []
+
+    motion_steps = {
+        "consultative": "Identify the specific architectural decisions or standards work IS will own in sessions 1–3.",
+        "onboarding": "Confirm the customer team lead who will execute alongside IS — Guided Delivery requires an active counterpart.",
+        "hok": "Get asset counts (dashboards, monitors, services) before quoting — HOK sizing depends directly on volume.",
+        "migration": "Name a decommission owner at the customer before scoping finalises — migrations without one stall at cutover.",
+        "resident_architect": "Book a scoping call to define the workstreams and agree days/week before any commercial discussion.",
+        "discovery": "Run the 5–10 day discovery to map requirements, counts, and ownership before building a full proposal.",
+    }
+    if motion in motion_steps:
+        next_steps.append(motion_steps[motion])
+
+    if deadline == "hard":
+        next_steps.append("Hard deadline in scope: lock scope in session 1. Never compress sessions — reduce scope instead.")
+    if team in ("enterprise", "large"):
+        next_steps.append("Enterprise scale: confirm a named pilot team and published rollout sequence before IS kickoff.")
+    if "security" in products:
+        next_steps.append("Security products in scope: introduce IS to security-ops and identity-team stakeholders early — these reviews add lead time.")
+
+    next_steps.append("Use the full scope flow to get a defensible proposal with a Salesforce opportunity lookup and full diagnostic.")
+
+    return {"why": why, "next_steps": next_steps}
+
+
 def merge_p1_seed(sf_answers: dict, p1_seed: dict) -> dict:
     """Merge Phase 1 seed answers into SF-prefilled answers.
 
