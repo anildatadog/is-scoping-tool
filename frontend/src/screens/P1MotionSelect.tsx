@@ -42,7 +42,7 @@ export function P1MotionSelect() {
       {isLoading && <p style={{ color: 'var(--dd-text-muted)', fontSize: '14px' }}>Loading…</p>}
       {error && (
         <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px', padding: '12px 16px', color: '#DC2626', fontSize: '13px' }}>
-          Failed to load — is the backend running?
+          Something went wrong loading the motions. Please try refreshing.
         </div>
       )}
 

@@ -7,16 +7,26 @@ import type {
 
 const BASE = import.meta.env.VITE_BACKEND_URL ?? 'https://is-scoping-backend-151745717948.us-central1.run.app'
 
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function req<T>(method: string, path: string, token: string, body?: unknown): Promise<T> {
-  const r = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (!r.ok) throw new Error(`${method} ${path} → ${r.status}`)
+  let r: Response
+  try {
+    r = await fetch(`${BASE}${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    throw new ApiError(0, 'network')
+  }
+  if (!r.ok) throw new ApiError(r.status, `${r.status}`)
   return r.json()
 }
 

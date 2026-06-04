@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './auth/useAuth'
+import { ApiError } from './api/client'
 import ddLogo from './assets/dd_logo_h_rgb.svg'
 import { SignInScreen } from './screens/SignInScreen'
 import { HomeScreen } from './screens/HomeScreen'
@@ -19,6 +21,20 @@ export const useToken = () => useContext(AuthCtx).token
 
 export default function App() {
   const { token, login, logout, isAuthenticated } = useAuth()
+  const qc = useQueryClient()
+
+  // Any 401 from any API call means the Google session expired — sign out silently
+  useEffect(() => {
+    const unsubscribe = qc.getQueryCache().subscribe(event => {
+      if (event.type === 'updated' && event.query.state.status === 'error') {
+        const err = event.query.state.error
+        if (err instanceof ApiError && err.status === 401) {
+          logout()
+        }
+      }
+    })
+    return unsubscribe
+  }, [qc, logout])
 
   if (!isAuthenticated) return <SignInScreen onLogin={login} />
 
