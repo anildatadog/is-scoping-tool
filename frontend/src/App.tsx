@@ -1,7 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { createContext, useContext, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './auth/useAuth'
+import { AuthCtx } from './auth/AuthContext'
 import { ApiError } from './api/client'
 import ddLogo from './assets/dd_logo_h_rgb.svg'
 import { SignInScreen } from './screens/SignInScreen'
@@ -13,11 +14,6 @@ import { SearchScreen } from './screens/SearchScreen'
 import { ReviewScreen } from './screens/ReviewScreen'
 import { QuestionnaireScreen } from './screens/QuestionnaireScreen'
 import { ResultScreen } from './screens/ResultScreen'
-
-export const AuthCtx = createContext<{ token: string; logout: () => void }>({
-  token: '', logout: () => {},
-})
-export const useToken = () => useContext(AuthCtx).token
 
 export default function App() {
   const { token, login, logout, isAuthenticated } = useAuth()

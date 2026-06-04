@@ -1,0 +1,41 @@
+<h2>Three architecture approaches</h2>
+<p class="subtitle">Same decisions: single app · two phases · FastAPI backend · Cloud Run. Different in how frontend and backend are packaged and deployed.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Monorepo — two Cloud Run services</h3>
+      <p>One GitHub repo with <code>frontend/</code> (Next.js) and <code>backend/</code> (FastAPI). Two separate Cloud Run services — <strong>is-scoping-frontend</strong> (public, handles OAuth) and <strong>is-scoping-backend</strong> (internal, API only). James owns <code>frontend/</code>, Anil owns <code>backend/</code>. Backend never publicly exposed.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>James has total frontend freedom</li><li>Backend stays internal — no public auth on API</li><li>One PR can touch both sides</li><li>Shared API types in <code>shared/</code></li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Two Cloud Run deploys to manage</li><li>Service-to-service auth to wire up (Cloud Run invoker)</li></ul></div>
+      </div>
+      <p style="margin-top:8px"><strong>⭐ Recommended</strong></p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Single container — nginx proxy</h3>
+      <p>One Cloud Run service running both Next.js (port 3000) and FastAPI (port 8000) inside the same container. nginx routes <code>/api/*</code> to FastAPI, everything else to Next.js. Single deploy.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>One Cloud Run service — simplest ops</li><li>No cross-service auth needed</li><li>Closest to current single-container model</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>nginx config adds complexity</li><li>Two runtimes in one container — harder to scale independently</li><li>Trickier local dev</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Separate repos — two Cloud Run services</h3>
+      <p>Frontend and backend in separate GitHub repos. James fully owns the frontend repo. Same two-service Cloud Run setup as A.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Cleanest ownership split</li><li>James iterates UI without touching backend repo</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Harder to keep API contract in sync</li><li>Cross-cutting changes need two PRs</li><li>More repo admin overhead</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

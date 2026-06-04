@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IS Scoping Tool — Design Directions</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; background: #f1f0f5; padding: 32px 24px; color: #1a1a2e; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .meta { font-size: 14px; color: #6b7280; margin-bottom: 32px; }
+  .rec { display: inline-block; background: #632CA6; color: white; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; vertical-align: middle; margin-left: 8px; }
+  .directions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .dir { border-radius: 12px; overflow: hidden; cursor: pointer; border: 3px solid transparent; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .dir:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+  .dir.selected { border-color: #632CA6; box-shadow: 0 0 0 4px rgba(99,44,166,0.2); }
+  .dir-label { padding: 10px 14px; background: white; font-size: 13px; font-weight: 700; color: #374151; border-top: 1px solid #e5e7eb; }
+  .dir-desc { padding: 0 14px 12px; background: white; font-size: 11px; color: #6b7280; line-height: 1.5; }
+
+  /* A */
+  .a-nav { background: #632CA6; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+  .a-logo { color: white; font-size: 13px; font-weight: 700; }
+  .a-nav-btn { background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 5px; padding: 3px 9px; font-size: 11px; }
+  .a-body { background: #fafafa; padding: 18px 14px; }
+  .a-title { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+  .a-sub { font-size: 11px; color: #6b7280; margin-bottom: 14px; }
+  .a-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .a-card { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+  .a-card-title { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+  .a-card-desc { font-size: 10px; color: #6b7280; line-height: 1.4; margin-bottom: 10px; }
+  .a-btn { display: block; background: #632CA6; color: white; border: none; border-radius: 5px; padding: 5px 10px; font-size: 10px; font-weight: 600; text-align: center; }
+  .a-btn-out { background: transparent; color: #632CA6; border: 1px solid #632CA6; }
+
+  /* B */
+  .b-wrap { background: #F6F8FA; }
+  .b-nav { background: white; border-bottom: 1px solid #e5e7eb; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+  .b-logo { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+  .b-badge { background: #632CA6; color: white; border-radius: 4px; padding: 2px 5px; font-size: 10px; font-weight: 700; }
+  .b-nav-r { font-size: 11px; color: #9ca3af; }
+  .b-body { padding: 18px 14px; }
+  .b-title { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+  .b-sub { font-size: 11px; color: #6b7280; margin-bottom: 14px; }
+  .b-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .b-card { background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+  .b-card-hd { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+  .b-icon { width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .b-icon.p { background: #F3EEFF; }
+  .b-icon.g { background: #F3F4F6; }
+  .b-card-title { font-size: 12px; font-weight: 600; }
+  .b-card-desc { font-size: 10px; color: #6b7280; line-height: 1.4; margin-bottom: 9px; }
+  .b-btn { display: block; padding: 5px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; text-align: center; }
+  .b-btn.p { background: #632CA6; color: white; border: none; }
+  .b-btn.s { background: transparent; color: #374151; border: 1px solid #d1d5db; }
+
+  /* C */
+  .c-wrap { background: #13132A; display: flex; height: 210px; }
+  .c-side { width: 48px; background: #0D0D1E; display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 14px; }
+  .c-ico { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .c-ico.a { background: #632CA6; }
+  .c-ico.d { opacity: 0.3; }
+  .c-main { flex: 1; display: flex; flex-direction: column; }
+  .c-top { background: #13132A; border-bottom: 1px solid rgba(255,255,255,0.05); padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+  .c-top-t { color: white; font-size: 12px; font-weight: 600; }
+  .c-top-r { color: rgba(255,255,255,0.3); font-size: 10px; }
+  .c-bd { padding: 12px; flex: 1; }
+  .c-label { color: rgba(255,255,255,0.4); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .c-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .c-card { background: #1E1E38; border: 1px solid rgba(255,255,255,0.06); border-radius: 7px; padding: 9px; }
+  .c-ct { color: white; font-size: 11px; font-weight: 600; margin-bottom: 3px; }
+  .c-cd { color: rgba(255,255,255,0.4); font-size: 9px; line-height: 1.4; margin-bottom: 7px; }
+  .c-btn { display: block; padding: 4px 9px; border-radius: 5px; font-size: 9px; font-weight: 600; text-align: center; }
+  .c-btn.p { background: #632CA6; color: white; border: none; }
+  .c-btn.s { background: transparent; color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.1); }
+
+  .sel-bar { display: none; margin-top: 28px; padding: 12px 18px; background: #632CA6; color: white; border-radius: 8px; font-size: 14px; font-weight: 600; text-align: center; }
+  .sel-bar.on { display: block; }
+</style>
+</head>
+<body>
+<h1>Pick a design direction <span class="rec">★ I recommend B</span></h1>
+<p class="meta">All three use Datadog purple (#632CA6). Click one to select, then confirm in the terminal.</p>
+
+<div class="directions">
+  <div class="dir" id="da" onclick="pick('a')">
+    <div>
+      <div class="a-nav"><div class="a-logo">🧭 IS Scoping Tool</div><button class="a-nav-btn">Sign out</button></div>
+      <div class="a-body">
+        <div class="a-title">IS Scoping Tool</div>
+        <div class="a-sub">Size an IS engagement</div>
+        <div class="a-cards">
+          <div class="a-card"><div class="a-card-title">⚡ Quick estimate</div><div class="a-card-desc">Pick a motion, 3–5 questions, rough day range.</div><div class="a-btn">Start →</div></div>
+          <div class="a-card"><div class="a-card-title">🔍 Full scope</div><div class="a-card-desc">Salesforce lookup + full diagnostic.</div><div class="a-btn a-btn-out">Look up →</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="dir-label">A — Bold Purple Header</div>
+    <div class="dir-desc">Datadog purple dominates the header. White content area. Like Linear or Notion with brand colour up top.</div>
+  </div>
+
+  <div class="dir" id="db" onclick="pick('b')">
+    <div class="b-wrap">
+      <div class="b-nav"><div class="b-logo"><div class="b-badge">DD</div> IS Scoping</div><div class="b-nav-r">anil.pappu@datadoghq.com</div></div>
+      <div class="b-body">
+        <div class="b-title">Good morning, Anil.</div>
+        <div class="b-sub">Size a Datadog IS engagement in minutes.</div>
+        <div class="b-cards">
+          <div class="b-card"><div class="b-card-hd"><div class="b-icon p">⚡</div><div class="b-card-title">Quick estimate</div></div><div class="b-card-desc">Pick a motion, answer a few questions, get a rough day range fast.</div><div class="b-btn p">Start estimate →</div></div>
+          <div class="b-card"><div class="b-card-hd"><div class="b-icon g">🔍</div><div class="b-card-title">Full scope</div></div><div class="b-card-desc">Look up an opp in Salesforce, run the full diagnostic, get a proposal.</div><div class="b-btn s">Look up opp →</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="dir-label" style="color:#632CA6; border-top:2px solid #632CA6;">★ B — Stripe / Stripe Professional (recommended)</div>
+    <div class="dir-desc">White cards with shadows, DD purple accent only on buttons and badges. Clean, professional, exactly what internal AE tools should look like. Stripe and HubSpot use this pattern.</div>
+  </div>
+
+  <div class="dir" id="dc" onclick="pick('c')">
+    <div class="c-wrap">
+      <div class="c-side">
+        <div style="color:#632CA6;font-size:12px;font-weight:800;">DD</div>
+        <div class="c-ico a">🧭</div>
+        <div class="c-ico d">📊</div>
+        <div class="c-ico d">⚙️</div>
+      </div>
+      <div class="c-main">
+        <div class="c-top"><div class="c-top-t">IS Scoping Tool</div><div class="c-top-r">Sign out</div></div>
+        <div class="c-bd">
+          <div class="c-label">Get started</div>
+          <div class="c-cards">
+            <div class="c-card"><div class="c-ct">⚡ Quick estimate</div><div class="c-cd">Motion + 3–5 questions → day range.</div><div class="c-btn p">Start →</div></div>
+            <div class="c-card"><div class="c-ct">🔍 Full scope</div><div class="c-cd">SF lookup + diagnostic.</div><div class="c-btn s">Look up →</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dir-label">C — Datadog Dark</div>
+    <div class="dir-desc">Dark navy/purple theme matching Datadog's product UI. Icon sidebar, immersive. Feels like you're inside Datadog itself.</div>
+  </div>
+</div>
+
+<div class="sel-bar" id="sbar"></div>
+
+<script>
+function pick(id) {
+  ['a','b','c'].forEach(x => document.getElementById('d'+x).classList.remove('selected'));
+  document.getElementById('d'+id).classList.add('selected');
+  const labels = {a:'A — Bold Purple Header',b:'B — Stripe Professional ★',c:'C — Datadog Dark'};
+  const bar = document.getElementById('sbar');
+  bar.textContent = 'Selected: ' + labels[id] + ' — confirm in the terminal';
+  bar.classList.add('on');
+  try { fetch('/__select', {method:'POST',body:JSON.stringify({choice:id,label:labels[id]}),headers:{'Content-Type':'application/json'}}); } catch(e){}
+}
+</script>
+</body>
+</html>

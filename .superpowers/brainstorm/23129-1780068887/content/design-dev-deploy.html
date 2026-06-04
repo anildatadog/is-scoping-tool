@@ -1,0 +1,61 @@
+<h2>Design — Local dev & deployment</h2>
+<p class="subtitle">docker-compose for local, two gcloud run deploy commands for production.</p>
+
+<div class="section">
+  <h3>Local development</h3>
+  <div class="mockup">
+    <div class="mockup-header">docker-compose up</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:13px;line-height:2">
+      <div>frontend  → http://localhost:3000 &nbsp;<span style="opacity:.5">(Next.js dev server)</span></div>
+      <div>backend   → http://localhost:8000 &nbsp;<span style="opacity:.5">(FastAPI + uvicorn)</span></div>
+      <div style="margin-top:8px;opacity:.7">frontend/.env.local:</div>
+      <div style="opacity:.7">&nbsp;&nbsp;BACKEND_URL=http://backend:8000</div>
+      <div style="opacity:.7">&nbsp;&nbsp;NEXTAUTH_URL=http://localhost:3000</div>
+      <div style="opacity:.7">&nbsp;&nbsp;GOOGLE_CLIENT_ID=... (from op run)</div>
+      <div style="margin-top:8px;opacity:.7">backend/.env:</div>
+      <div style="opacity:.7">&nbsp;&nbsp;SNOWFLAKE_PAT=... (from op run)</div>
+      <div style="opacity:.7">&nbsp;&nbsp;ANTHROPIC_API_KEY=... (from op run)</div>
+      <div style="margin-top:8px;opacity:.6">James runs only: cd frontend && npm run dev</div>
+      <div style="opacity:.6">Backend auto-starts via compose with hot-reload</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Cloud Run deployment</h3>
+  <div class="mockup">
+    <div class="mockup-header">Two deploy commands (manual, same as today)</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:2">
+      <div style="opacity:.6"># Backend (deploy first)</div>
+      <div>gcloud run deploy is-scoping-backend \</div>
+      <div>&nbsp;&nbsp;--source backend/ \</div>
+      <div>&nbsp;&nbsp;--region us-central1 \</div>
+      <div>&nbsp;&nbsp;--no-allow-unauthenticated \</div>
+      <div>&nbsp;&nbsp;--vpc-connector is-scoping-tool-vpc \</div>
+      <div>&nbsp;&nbsp;--set-secrets="SNOWFLAKE_PAT=...,ANTHROPIC_API_KEY=..."</div>
+      <br>
+      <div style="opacity:.6"># Frontend (deploy second)</div>
+      <div>gcloud run deploy is-scoping-frontend \</div>
+      <div>&nbsp;&nbsp;--source frontend/ \</div>
+      <div>&nbsp;&nbsp;--region us-central1 \</div>
+      <div>&nbsp;&nbsp;--allow-unauthenticated \</div>
+      <div>&nbsp;&nbsp;--set-env-vars="BACKEND_URL=https://is-scoping-backend-[hash].run.app" \</div>
+      <div>&nbsp;&nbsp;--set-secrets="GOOGLE_CLIENT_ID=...,GOOGLE_CLIENT_SECRET=...,NEXTAUTH_SECRET=..."</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>What gets decommissioned</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-size:13px;line-height:1.8">
+      <div>✓ Current <code>is-scoping-tool</code> Cloud Run service — deleted once frontend is live</div>
+      <div>✓ <code>Scope_an_opportunity.py</code> — replaced by Next.js frontend</div>
+      <div>✓ <code>docker-entrypoint.sh</code> — Streamlit-specific, not needed</div>
+      <div>✓ Streamlit deps from requirements.txt</div>
+      <div style="margin-top:8px;opacity:.6">Everything in backend/ (Python logic) stays exactly as-is.</div>
+    </div>
+  </div>
+</div>
+
+<p style="margin-top:16px">Happy with this? If so I'll write the spec doc and we can move to the implementation plan.</p>

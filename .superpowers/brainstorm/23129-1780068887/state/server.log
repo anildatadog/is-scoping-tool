@@ -1,0 +1,8 @@
+{"type":"server-started","port":54078,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:54078","screen_dir":"/Users/anilkumar.pappu/Documents/Git/is-scoping-tool/.superpowers/brainstorm/23129-1780068887/content","state_dir":"/Users/anilkumar.pappu/Documents/Git/is-scoping-tool/.superpowers/brainstorm/23129-1780068887/state"}
+{"type":"screen-added","file":"/Users/anilkumar.pappu/Documents/Git/is-scoping-tool/.superpowers/brainstorm/23129-1780068887/content/approaches.html"}
+{"type":"screen-added","file":"/Users/anilkumar.pappu/Documents/Git/is-scoping-tool/.superpowers/brainstorm/23129-1780068887/content/design-repo.html"}
+{"type":"screen-added","file":"/Users/anilkumar.pappu/Documents/Git/is-scoping-tool/.superpowers/brainstorm/23129-1780068887/content/design-auth.html"}
+{"type":"screen-added","file":"/Users/anilkumar.pappu/Documents/Git/is-scoping-tool/.superpowers/brainstorm/23129-1780068887/content/design-api-screens.html"}
+{"type":"screen-added","file":"/Users/anilkumar.pappu/Documents/Git/is-scoping-tool/.superpowers/brainstorm/23129-1780068887/content/design-dev-deploy.html"}
+{"type":"screen-added","file":"/Users/anilkumar.pappu/Documents/Git/is-scoping-tool/.superpowers/brainstorm/23129-1780068887/content/design-dev-deploy-v2.html"}
+{"type":"server-stopped","reason":"idle timeout"}

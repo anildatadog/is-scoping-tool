@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useP2State } from '@/hooks/useP2State'
 import { QUESTIONS } from '@/data/questions'
+import type { Opt } from '@/data/questions'
 
 function OptionRow({ selected, onClick, label, sublabel }: {
   selected: boolean; onClick: () => void; label: string; sublabel?: string
@@ -82,7 +83,8 @@ export function QuestionnaireScreen() {
 
   if (!q) { nav('/scope/result'); return null }
 
-  const hasAnswer = q.kind === 'multiselect' ? true : !!answers[q.id]
+  const currentMulti = Array.isArray(answers[q.id]) ? answers[q.id] as string[] : []
+  const hasAnswer = q.kind === 'multiselect' ? currentMulti.length > 0 : !!answers[q.id]
 
   function next() {
     if (step < visible.length - 1) setStep(step + 1)
@@ -106,7 +108,7 @@ export function QuestionnaireScreen() {
       <div style={{ background: 'white', border: '1px solid var(--dd-border)', borderRadius: '10px', padding: '20px', boxShadow: 'var(--dd-shadow)', marginBottom: '16px' }}>
         <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dd-text)', marginBottom: '14px' }}>{q.q}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {q.opts.map((o: any) => {
+          {q.opts.map((o: Opt) => {
             const isMulti = q.kind === 'multiselect'
             const curr = answers[q.id]
             const selected = isMulti ? ((curr as string[]) || []).includes(o.v) : curr === o.v

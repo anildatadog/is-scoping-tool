@@ -4,8 +4,11 @@
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # backend/ on path
+for module_name in ("diagnosis", "methodologies", "phase1", "prose", "snowflake_lookup"):
+    sys.modules.pop(module_name, None)
 
 from fastapi.testclient import TestClient
+import main
 from main import app
 
 client = TestClient(app)
@@ -259,6 +262,29 @@ def test_unauthenticated_request_returns_401():
     os.environ["GOOGLE_CLIENT_ID"] = "test-client-id"
     try:
         r = client.get("/search?q=acme")
+        assert r.status_code == 401
+    finally:
+        del os.environ["GOOGLE_CLIENT_ID"]
+
+
+def test_valid_token_calls_endpoint():
+    os.environ["GOOGLE_CLIENT_ID"] = "test-client-id"
+    try:
+        with (
+            patch("main.verify_google_bearer", return_value={"email": "user@datadoghq.com"}),
+            patch("main.sf.search_accounts", return_value=[]),
+        ):
+            r = client.get("/search?q=acme", headers={"Authorization": "Bearer signed-token"})
+        assert r.status_code == 200
+    finally:
+        del os.environ["GOOGLE_CLIENT_ID"]
+
+
+def test_invalid_token_returns_401():
+    os.environ["GOOGLE_CLIENT_ID"] = "test-client-id"
+    try:
+        with patch("main.verify_google_bearer", side_effect=main.AuthFailure(401, "Unauthorized")):
+            r = client.get("/search?q=acme", headers={"Authorization": "Bearer bad-token"})
         assert r.status_code == 401
     finally:
         del os.environ["GOOGLE_CLIENT_ID"]

@@ -1,4 +1,4 @@
-type Opt = { v: string; l: string; s?: string }
+export type Opt = { v: string; l: string; s?: string }
 export type Q = { id: string; q: string; kind: string; opts: Opt[]; show: (a: Record<string, unknown>) => boolean }
 
 export const QUESTIONS: Q[] = [

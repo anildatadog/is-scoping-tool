@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
-from functools import lru_cache
 from typing import Any
 
 import snowflake.connector
@@ -18,6 +18,7 @@ import snowflake.connector
 # Salesforce opp IDs: 15-char case-sensitive (006 + 12) or 18-char with checksum (006 + 15)
 OPP_ID_RE = re.compile(r"^006[a-zA-Z0-9]{12,15}$")
 SNOWFLAKE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
+_THREAD_LOCAL = threading.local()
 
 _REGULATED_KEYWORDS = (
     "financial", "bank", "insurance", "healthcare", "hospital",
@@ -41,9 +42,12 @@ def _quote_identifier(name: str) -> str:
 
 
 def _use_warehouse(conn: snowflake.connector.SnowflakeConnection, warehouse: str) -> None:
-    """Set the active warehouse. If the configured warehouse isn't accessible,
-    auto-discovers the first warehouse available to the current role and uses that.
-    Logs which warehouse was selected so the env var can be updated permanently."""
+    """Set the active warehouse.
+
+    By default this fails loudly if the configured warehouse is unavailable.
+    Set SNOWFLAKE_ALLOW_WAREHOUSE_FALLBACK=true to temporarily auto-discover a
+    usable warehouse while diagnosing access issues.
+    """
     import logging
     log = logging.getLogger(__name__)
     cur = conn.cursor()
@@ -52,14 +56,15 @@ def _use_warehouse(conn: snowflake.connector.SnowflakeConnection, warehouse: str
             cur.execute(f"USE WAREHOUSE {_quote_identifier(warehouse)}")
             return
         except snowflake.connector.errors.ProgrammingError:
-            pass  # configured warehouse not accessible — auto-discover
+            if os.environ.get("SNOWFLAKE_ALLOW_WAREHOUSE_FALLBACK", "").lower() != "true":
+                raise
 
         # Discover warehouses available to this user/role
         cur.execute("SHOW WAREHOUSES")
         rows = cur.fetchall()
         if not rows:
             raise RuntimeError(
-                f"IS_SCOPING_TOOL_USER has no accessible warehouses. "
+                f"{os.environ.get('SNOWFLAKE_USER', 'Snowflake user')} has no accessible warehouses. "
                 f"Configured warehouse '{warehouse}' is not available. "
                 f"Grant USAGE on a warehouse to this user."
             )
@@ -109,8 +114,11 @@ def _load_private_key() -> bytes | None:
     )
 
 
-@lru_cache(maxsize=1)
 def _connect() -> snowflake.connector.SnowflakeConnection:
+    existing = getattr(_THREAD_LOCAL, "conn", None)
+    if existing is not None:
+        return existing
+
     common = dict(
         account=os.environ.get("SNOWFLAKE_ACCOUNT", "sza96462.us-east-1"),
         user=os.environ["SNOWFLAKE_USER"],
@@ -132,11 +140,13 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
             authenticator="PROGRAMMATIC_ACCESS_TOKEN",
         )
         _use_warehouse(conn, common["warehouse"])
+        _THREAD_LOCAL.conn = conn
         return conn
     private_key = _load_private_key()
     if private_key is not None:
         conn = snowflake.connector.connect(**common, private_key=private_key)
         _use_warehouse(conn, common["warehouse"])
+        _THREAD_LOCAL.conn = conn
         return conn
     # externalbrowser only works when a real browser can be launched — fine for
     # local dev, but in Howler (headless) it hangs forever. Fail loudly so the
@@ -148,6 +158,7 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
         )
     conn = snowflake.connector.connect(**common, authenticator="externalbrowser")
     _use_warehouse(conn, common["warehouse"])
+    _THREAD_LOCAL.conn = conn
     return conn
 
 

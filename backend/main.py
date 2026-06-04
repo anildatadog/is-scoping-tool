@@ -14,6 +14,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 import snowflake_lookup as sf
+from auth import AuthFailure, verify_google_bearer
 from diagnosis import diagnose, to_service_motion
 from methodologies import recommend, build_flags, build_next_steps
 from phase1 import MOTIONS, fast_estimate, explain_estimate
@@ -38,41 +39,13 @@ async def verify_google_token(request: Request, call_next):
     Rejects non-@datadoghq.com accounts with 403.
     """
     client_id = os.environ.get("GOOGLE_CLIENT_ID")
-    if not client_id or request.url.path in ("/health", "/debug/sf") or request.method == "OPTIONS":
+    if not client_id or request.url.path == "/health" or request.method == "OPTIONS":
         return await call_next(request)
 
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
-
-    token = auth[7:]
     try:
-        import base64, json as _json, time
-        # Decode JWT payload without signature verification.
-        # The signature is Google's — only Google can mint it. For an internal
-        # tool this is sufficient; full JWKS verification requires an outbound
-        # HTTP call that fails inside our VPC-egress configuration.
-        parts = token.split(".")
-        if len(parts) != 3:
-            raise ValueError("not a JWT")
-        payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
-        payload = _json.loads(base64.urlsafe_b64decode(payload_b64))
-        # Check audience matches our OAuth client
-        aud = payload.get("aud", "")
-        if isinstance(aud, list):
-            if client_id not in aud:
-                raise ValueError("wrong audience")
-        elif aud != client_id:
-            raise ValueError("wrong audience")
-        # Check token not expired
-        if payload.get("exp", 0) < time.time():
-            raise ValueError("token expired")
-        # Check domain
-        email = payload.get("email", "")
-        if not email.endswith("@datadoghq.com"):
-            return JSONResponse({"detail": "Forbidden — Datadog accounts only"}, status_code=403)
-    except Exception:
-        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        verify_google_bearer(request.headers.get("Authorization", ""), client_id)
+    except AuthFailure as exc:
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
     return await call_next(request)
 
