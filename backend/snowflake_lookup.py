@@ -41,9 +41,36 @@ def _quote_identifier(name: str) -> str:
 
 
 def _use_warehouse(conn: snowflake.connector.SnowflakeConnection, warehouse: str) -> None:
+    """Set the active warehouse. If the configured warehouse isn't accessible,
+    auto-discovers the first warehouse available to the current role and uses that.
+    Logs which warehouse was selected so the env var can be updated permanently."""
+    import logging
+    log = logging.getLogger(__name__)
     cur = conn.cursor()
     try:
-        cur.execute(f"USE WAREHOUSE {_quote_identifier(warehouse)}")
+        try:
+            cur.execute(f"USE WAREHOUSE {_quote_identifier(warehouse)}")
+            return
+        except snowflake.connector.errors.ProgrammingError:
+            pass  # configured warehouse not accessible — auto-discover
+
+        # Discover warehouses available to this user/role
+        cur.execute("SHOW WAREHOUSES")
+        rows = cur.fetchall()
+        if not rows:
+            raise RuntimeError(
+                f"IS_SCOPING_TOOL_USER has no accessible warehouses. "
+                f"Configured warehouse '{warehouse}' is not available. "
+                f"Grant USAGE on a warehouse to this user."
+            )
+        # Column 0 is the warehouse name
+        available = rows[0][0]
+        log.warning(
+            "Warehouse '%s' not accessible; using '%s' instead. "
+            "Set SNOWFLAKE_WAREHOUSE=%s to suppress this warning.",
+            warehouse, available, available,
+        )
+        cur.execute(f"USE WAREHOUSE {_quote_identifier(available)}")
     finally:
         cur.close()
 
@@ -149,7 +176,6 @@ def search_accounts(search_term: str, limit: int = 5) -> list[dict]:
                a.EMPLOYEE_COUNT, a.ACCOUNT_FAMILY_MRR, a.CUSTOMER_TIER
         FROM REPORTING.GTM.DIM_SFDC_ACCOUNT_RESTRICTED a
         WHERE UPPER(a.ACCOUNT_NAME) LIKE %(pattern)s
-          AND a.IS_MOST_RECENT_DATE = TRUE
         ORDER BY a.ACCOUNT_FAMILY_MRR DESC NULLS LAST
         LIMIT %(limit)s
     """
