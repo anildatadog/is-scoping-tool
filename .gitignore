@@ -29,3 +29,6 @@ venv/
 # Worktrees
 .claude/worktrees/
 .env.local
+
+# Superpowers brainstorm sessions
+.superpowers/
