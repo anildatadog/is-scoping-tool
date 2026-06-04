@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/api/client'
-import { useToken } from '../App'
+import { api, ApiError } from '@/api/client'
+import { useToken, AuthCtx } from '../App'
+import { useContext } from 'react'
 import { useP2State } from '@/hooks/useP2State'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -14,6 +15,7 @@ export function SearchScreen() {
   const [submitted, setSubmitted] = useState('')
   const nav = useNavigate()
   const token = useToken()
+  const { logout } = useContext(AuthCtx)
   const { setSfData } = useP2State()
 
   const { data: results, isLoading, error } = useQuery({
@@ -27,10 +29,11 @@ export function SearchScreen() {
       setSfData(item as SfData)
       nav('/scope/review')
     } else {
-      api.selectAccount(item as AccountResult, token).then((sfData) => {
-        setSfData(sfData)
-        nav('/scope/review')
-      })
+      api.selectAccount(item as AccountResult, token)
+        .then((sfData) => { setSfData(sfData); nav('/scope/review') })
+        .catch((err) => {
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) logout()
+        })
     }
   }
 

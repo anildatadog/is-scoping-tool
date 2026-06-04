@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useToken } from '../App'
+import { useP1State } from '@/hooks/useP1State'
 import type { Motion } from '@/api-types'
 
 const MOTION_ICONS: Record<string, string> = {
@@ -12,6 +13,7 @@ const MOTION_ICONS: Record<string, string> = {
 export function P1MotionSelect() {
   const nav = useNavigate()
   const token = useToken()
+  const { setMotion } = useP1State()
   const { data: motions, isLoading, error } = useQuery({
     queryKey: ['phase1Motions'],
     queryFn: () => api.phase1Motions(token),
@@ -51,7 +53,7 @@ export function P1MotionSelect() {
           {(Object.entries(motions) as [string, Motion][]).map(([key, m]) => (
             <div
               key={key}
-              onClick={() => nav(`/estimate/${key}`)}
+              onClick={() => { setMotion(key); nav(`/estimate/${key}`) }}
               style={{
                 background: 'white',
                 border: '1px solid var(--dd-border)',

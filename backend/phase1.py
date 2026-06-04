@@ -186,11 +186,13 @@ def explain_estimate(motion: str, answers: dict) -> dict:
         if add_ons else None
     )
 
+    # Resident Architect and Discovery don't ask about readiness — suppress the note
+    _shows_readiness = motion not in ("resident_architect", "discovery")
     readiness_note = {
         "ready": None,
         "partial": "partial readiness (some instrumentation exists) adds ramp-up sessions",
         "missing": "starting from zero adds significant ramp-up — expect the higher end of the range",
-    }.get(readiness)
+    }.get(readiness) if _shows_readiness else None
 
     motion_context = {
         "consultative": f"Consultative / Advisory for {team_label} sizes by workstream complexity and the number of architectural decisions IS needs to drive.",
@@ -228,7 +230,7 @@ def explain_estimate(motion: str, answers: dict) -> dict:
     if motion in motion_steps:
         next_steps.append(motion_steps[motion])
 
-    if deadline == "hard":
+    if deadline == "hard" and motion not in ("resident_architect", "discovery"):
         next_steps.append("Hard deadline in scope: lock scope in session 1. Never compress sessions — reduce scope instead.")
     if team in ("enterprise", "large"):
         next_steps.append("Enterprise scale: confirm a named pilot team and published rollout sequence before IS kickoff.")

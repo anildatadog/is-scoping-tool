@@ -28,7 +28,7 @@ export default function App() {
     const unsubscribe = qc.getQueryCache().subscribe(event => {
       if (event.type === 'updated' && event.query.state.status === 'error') {
         const err = event.query.state.error
-        if (err instanceof ApiError && err.status === 401) {
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
           logout()
         }
       }

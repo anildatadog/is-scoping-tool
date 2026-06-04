@@ -750,7 +750,7 @@ def diagnose(answers: dict) -> Diagnosis:
 
 _SERVICE_MOTION: dict[tuple[str, str], str] = {
     ("Foundation",       "IS-delivered"):       "HOK / Hands-on-Keyboard",
-    ("Foundation",       "Customer-delivered"): "Team Onboarding & Enablement",
+    ("Foundation",       "Customer-delivered"): "Guided Delivery",
     ("Foundation",       "Partner-delivered"):  "HOK / Hands-on-Keyboard",
     ("Accelerator",      "IS-delivered"):       "HOK / Hands-on-Keyboard",
     ("Accelerator",      "Customer-delivered"): "Consultative / Advisory",
