@@ -39,16 +39,34 @@ export function P1Result() {
 
       {est?.days_min != null ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
-          {[
-            { label: 'Recommended motion', value: m?.label },
-            { label: 'Estimated days', value: `${est.days_min}–${est.days_max}` },
-            { label: 'PM required?', value: est.pm_required ? 'Yes' : 'No', red: est.pm_required },
-          ].map(({ label, value, red }) => (
-            <div key={label} style={{ background: 'white', border: '1px solid var(--dd-border)', borderRadius: '10px', padding: '14px 16px', boxShadow: 'var(--dd-shadow)' }}>
-              <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{label}</div>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: red ? '#DC2626' : 'var(--dd-text)' }}>{value}</div>
+          {/* Motion */}
+          <div style={{ background: 'white', border: '1px solid var(--dd-border)', borderRadius: '10px', padding: '14px 16px', boxShadow: 'var(--dd-shadow)' }}>
+            <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Recommended motion</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--dd-text)' }}>{m?.label}</div>
+          </div>
+          {/* Estimated days */}
+          <div style={{ background: 'white', border: '1px solid var(--dd-border)', borderRadius: '10px', padding: '14px 16px', boxShadow: 'var(--dd-shadow)' }}>
+            <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Estimated days</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--dd-text)' }}>{est.days_min}–{est.days_max}</div>
+          </div>
+          {/* PM card — shows threshold note when required */}
+          <div style={{
+            background: est.pm_required ? '#FFF5F5' : 'white',
+            border: `1px solid ${est.pm_required ? '#FECACA' : 'var(--dd-border)'}`,
+            borderRadius: '10px', padding: '14px 16px', boxShadow: 'var(--dd-shadow)',
+          }}>
+            <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>PM required?</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: est.pm_required ? '#DC2626' : 'var(--dd-text)', marginBottom: est.pm_required ? '6px' : 0 }}>
+              {est.pm_required ? 'Yes' : 'No'}
             </div>
-          ))}
+            {est.pm_required && (
+              <div style={{ fontSize: '11px', color: '#9B1C1C', lineHeight: 1.4 }}>
+                {(est.days_max ?? 0) >= 70
+                  ? 'Mandatory at 70+ days — include a PM line item in the proposal.'
+                  : 'Recommended at 50+ days — include a PM line item in the proposal.'}
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div style={{ background: 'white', border: '1px solid var(--dd-border)', borderRadius: '10px', padding: '16px 20px', marginBottom: '20px', color: 'var(--dd-text-muted)' }}>
