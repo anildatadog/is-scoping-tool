@@ -34,6 +34,28 @@ def test_search_account_by_opp_id(client):
     assert resp.json() == [mock_sf_data]
 
 
+# --- /scoping/get_account_details ---
+
+def test_get_account_details_found(client):
+    mock_opp = {"OPPORTUNITY_ID": "006abc", "ACCOUNT_ID": "001abc"}
+    mock_full = {"account": {}, "opportunity": mock_opp}
+    mock_sf_data = {"oppId": "006abc", "accountName": "Acme Corp"}
+    with (
+        patch("snowflake_lookup.lookup_opp_by_id", return_value=mock_opp),
+        patch("snowflake_lookup.fetch_full", return_value=mock_full),
+        patch("snowflake_lookup.to_sf_data", return_value=mock_sf_data),
+    ):
+        resp = client.post("/scoping/get_account_details", json={"opp_id": "006abc"})
+    assert resp.status_code == 200
+    assert resp.json()["accountName"] == "Acme Corp"
+
+def test_get_account_details_not_found(client):
+    with patch("snowflake_lookup.lookup_opp_by_id", return_value=None):
+        resp = client.post("/scoping/get_account_details", json={"opp_id": "006xyz"})
+    assert resp.status_code == 200
+    assert "error" in resp.json()
+
+
 # --- /scoping/run_estimate ---
 
 def test_run_estimate_returns_structured_result(client):
@@ -55,6 +77,22 @@ def test_run_estimate_returns_structured_result(client):
     assert body["p1_days_high"] == 50
     assert body["service_motion"] == "Guided Delivery"
     assert body["pm_required"] is False  # sMax=50 is NOT > 50, motion != migration
+
+def test_run_estimate_pm_required_true(client):
+    answers = {"ddStatus": "new", "motion": "migration"}
+    mock_diag = {"shape": {"value": "gap-filler"}, "motion": {"value": "migration"}, "binding_constraints": []}
+    mock_rec = {"key": "migration", "sMin": 35, "sMax": 99}
+    with (
+        patch("diagnosis.diagnose", return_value=mock_diag),
+        patch("methodologies.recommend", return_value=mock_rec),
+        patch("methodologies.build_flags", return_value=[]),
+        patch("methodologies.build_next_steps", return_value=[]),
+        patch("diagnosis.to_service_motion", return_value="Advisory"),
+    ):
+        resp = client.post("/scoping/run_estimate", json={"answers": answers})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["pm_required"] is True  # key == "migration"
 
 
 # --- /scoping/log_estimate ---
