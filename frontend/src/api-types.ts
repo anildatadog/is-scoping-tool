@@ -67,6 +67,33 @@ export interface DiagnoseResponse {
   service_motion: string;
 }
 
+// ── /scoping/governed_handoff ───────────────────────────────────
+
+export interface GovernedHandoffRequest {
+  org_id: string;
+  engagement_id?: string;
+  answers: Record<string, string | string[]>;
+  sf_data?: SfData;
+  scoping_summary?: string;
+}
+
+export interface GovernedHandoffResponse {
+  target_mcp: "dd-governed-onboarding-mcp";
+  tool: "initialize_engagement";
+  arguments: {
+    org_id: string;
+    engagement_id: string;
+    products_in_scope: string[];
+    engagement_type: string;
+    session_count: number | null;
+    source_opportunity_id: string;
+    scoping_summary: string;
+    scoping_payload: Record<string, unknown>;
+  };
+  next_tool: "batch_submit_intake";
+  notes: string[];
+}
+
 // ── /prose ───────────────────────────────────────────────────────
 
 export interface ProseRequest {

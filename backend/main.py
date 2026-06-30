@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, HTTPException, Query
+from typing import Any
+
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+import scoping_handlers as _sc
 import snowflake_lookup as sf
 from auth import AuthFailure, verify_google_bearer
 from diagnosis import diagnose, to_service_motion
@@ -21,6 +24,84 @@ from phase1 import MOTIONS, fast_estimate, explain_estimate
 from prose import generate as generate_prose
 
 app = FastAPI(title="IS Scoping Backend", version="1.0.0")
+
+# ── Scoping router (Go MCP front / ADR-0017) ─────────────────────
+scoping_router = APIRouter(prefix="/scoping", tags=["scoping"])
+
+
+class _SearchAccountRequest(BaseModel):
+    q: str
+
+
+class _GetAccountDetailsRequest(BaseModel):
+    opp_id: str
+
+
+class _RunEstimateRequest(BaseModel):
+    answers: dict[str, Any]
+
+
+class _GovernedHandoffRequest(BaseModel):
+    org_id: str
+    engagement_id: str = ""
+    answers: dict[str, Any]
+    sf_data: dict[str, Any] | None = None
+    scoping_summary: str = ""
+
+
+class _LogEstimateRequest(BaseModel):
+    row: dict[str, Any]
+
+
+class _GetPipelineRequest(BaseModel):
+    question: str
+    customer: str | None = None
+    estimator: str | None = None
+    quarter: str | None = None
+    threshold_days: int | None = None
+
+
+@scoping_router.post("/search_account")
+def search_account(req: _SearchAccountRequest) -> list[dict]:
+    return _sc.search_account(req.q)
+
+
+@scoping_router.post("/get_account_details")
+def get_account_details(req: _GetAccountDetailsRequest) -> dict:
+    return _sc.get_account_details(req.opp_id)
+
+
+@scoping_router.post("/run_estimate")
+def run_estimate(req: _RunEstimateRequest) -> dict:
+    return _sc.run_estimate(req.answers)
+
+
+@scoping_router.post("/governed_handoff")
+def governed_handoff(req: _GovernedHandoffRequest) -> dict:
+    return _sc.build_governed_handoff(
+        req.org_id,
+        req.answers,
+        sf_data=req.sf_data,
+        scoping_summary=req.scoping_summary,
+        engagement_id=req.engagement_id,
+    )
+
+
+@scoping_router.post("/log_estimate")
+def log_estimate(req: _LogEstimateRequest) -> dict:
+    _sc.log_estimate(req.row)
+    return {"status": "logged"}
+
+
+@scoping_router.post("/get_pipeline")
+def get_pipeline(req: _GetPipelineRequest) -> dict:
+    return _sc.get_pipeline(
+        req.question, customer=req.customer, estimator=req.estimator,
+        quarter=req.quarter, threshold_days=req.threshold_days,
+    )
+
+
+app.include_router(scoping_router)
 
 app.add_middleware(
     CORSMiddleware,
