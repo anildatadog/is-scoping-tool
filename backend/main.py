@@ -41,6 +41,14 @@ class _RunEstimateRequest(BaseModel):
     answers: dict[str, Any]
 
 
+class _GovernedHandoffRequest(BaseModel):
+    org_id: str
+    engagement_id: str = ""
+    answers: dict[str, Any]
+    sf_data: dict[str, Any] | None = None
+    scoping_summary: str = ""
+
+
 class _LogEstimateRequest(BaseModel):
     row: dict[str, Any]
 
@@ -66,6 +74,17 @@ def get_account_details(req: _GetAccountDetailsRequest) -> dict:
 @scoping_router.post("/run_estimate")
 def run_estimate(req: _RunEstimateRequest) -> dict:
     return _sc.run_estimate(req.answers)
+
+
+@scoping_router.post("/governed_handoff")
+def governed_handoff(req: _GovernedHandoffRequest) -> dict:
+    return _sc.build_governed_handoff(
+        req.org_id,
+        req.answers,
+        sf_data=req.sf_data,
+        scoping_summary=req.scoping_summary,
+        engagement_id=req.engagement_id,
+    )
 
 
 @scoping_router.post("/log_estimate")

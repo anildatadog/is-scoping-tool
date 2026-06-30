@@ -11,6 +11,55 @@ import sheets as _sheets
 import snowflake_lookup as _sf
 from pipeline import classify_intent, synthesise_pipeline
 
+_PRODUCT_SCOPE_TO_GOVERNED_PRODUCTS = {
+    "infra_apm_logs": ["infra", "apm", "logs"],
+    "dx": ["rum", "synthetics_api"],
+    "security": ["security"],
+    "ai": ["llm_observability"],
+    "workflow": ["workflow", "ci_cd", "bits_ai"],
+    "finops": ["cloud_cost_management"],
+}
+
+_METHODOLOGY_TO_ENGAGEMENT_TYPE = {
+    "hok": "hok",
+    "governedPlatform": "governed_platform",
+    "goldenPattern": "governed_platform",
+    "onboarding": "pair_programming",
+    "capabilityBuild": "advisory",
+    "consultative": "advisory",
+}
+
+
+def _normalise_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def _governed_products_from_answers(answers: dict) -> list[str]:
+    products: list[str] = []
+    for scope in _normalise_list(answers.get("productScope")):
+        products.extend(_PRODUCT_SCOPE_TO_GOVERNED_PRODUCTS.get(scope, [scope]))
+    if not products:
+        products.extend(["infra", "apm", "logs"])
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for product in products:
+        if product not in seen:
+            seen.add(product)
+            result.append(product)
+    return result
+
+
+def _default_engagement_id(org_id: str, sf_data: dict) -> str:
+    opportunity_id = sf_data.get("opportunityId") or sf_data.get("oppId") or ""
+    return opportunity_id or f"{org_id}-engagement"
+
 
 def search_account(q: str) -> list[dict]:
     if _sf.is_opp_id(q):
@@ -56,6 +105,55 @@ def run_estimate(answers: dict) -> dict:
         "binding_constraints": [c["value"] for c in diag.get("binding_constraints", [])],
         "flags": flags,
         "next_steps": next_steps,
+    }
+
+
+def build_governed_handoff(
+    org_id: str,
+    answers: dict,
+    sf_data: dict | None = None,
+    scoping_summary: str = "",
+    engagement_id: str = "",
+) -> dict:
+    estimate = run_estimate(answers)
+    sf_data = sf_data or {}
+    methodology = estimate["methodology"]
+    p1_mid = estimate.get("p1_days_mid")
+    opportunity_id = sf_data.get("opportunityId") or sf_data.get("oppId") or ""
+    engagement_id = engagement_id.strip()
+    if opportunity_id and engagement_id and engagement_id != opportunity_id:
+        return {
+            "error": (
+                "engagement_id must match the Salesforce Opportunity ID for "
+                "Salesforce-backed handoffs."
+            ),
+            "expected_engagement_id": opportunity_id,
+        }
+    engagement_id = opportunity_id or engagement_id or _default_engagement_id(org_id, sf_data)
+
+    arguments = {
+        "org_id": org_id,
+        "engagement_id": engagement_id,
+        "products_in_scope": _governed_products_from_answers(answers),
+        "engagement_type": _METHODOLOGY_TO_ENGAGEMENT_TYPE.get(methodology, "advisory"),
+        "session_count": p1_mid,
+        "source_opportunity_id": opportunity_id,
+        "scoping_summary": scoping_summary,
+        "scoping_payload": {
+            "sf_data": sf_data,
+            "answers": answers,
+            "estimate": estimate,
+        },
+    }
+    return {
+        "target_mcp": "dd-governed-onboarding-mcp",
+        "tool": "initialize_engagement",
+        "arguments": arguments,
+        "next_tool": "batch_submit_intake",
+        "notes": [
+            "This initializes the governed engagement only.",
+            "Submit service-level inventory separately with batch_submit_intake dry_run=true first.",
+        ],
     }
 
 

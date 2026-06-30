@@ -1,6 +1,7 @@
 import type {
   AccountResult, SfData,
   DiagnoseRequest, DiagnoseResponse,
+  GovernedHandoffRequest, GovernedHandoffResponse,
   ProseRequest, ProseResponse,
   MotionsResponse, EstimateRequest, EstimateResponse,
 } from '@/api-types'
@@ -54,4 +55,7 @@ export const api = {
 
   phase1Explain: (body: EstimateRequest, token: string) =>
     req<{ why: string; next_steps: string[] }>('POST', '/phase1/explain', token, body),
+
+  governedHandoff: (body: GovernedHandoffRequest, token: string) =>
+    req<GovernedHandoffResponse>('POST', '/scoping/governed_handoff', token, body),
 }

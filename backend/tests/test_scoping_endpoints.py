@@ -95,6 +95,127 @@ def test_run_estimate_pm_required_true(client):
     assert body["pm_required"] is True  # key == "migration"
 
 
+# --- /scoping/governed_handoff ---
+
+def test_governed_handoff_returns_initialize_engagement_payload(client):
+    answers = {"productScope": ["infra_apm_logs", "dx"]}
+    estimate = {
+        "methodology": "onboarding",
+        "p1_days_low": 20,
+        "p1_days_high": 50,
+        "p1_days_mid": 35,
+        "pm_required": False,
+        "shape": "team-onboarding",
+        "motion": "onboarding",
+        "service_motion": "Guided Delivery",
+        "binding_constraints": [],
+        "flags": [],
+        "next_steps": ["step 1"],
+    }
+    with patch("scoping_handlers.run_estimate", return_value=estimate):
+        resp = client.post("/scoping/governed_handoff", json={
+            "org_id": "acme",
+            "engagement_id": "006abc",
+            "answers": answers,
+            "sf_data": {"opportunityId": "006abc", "accountName": "Acme Corp"},
+            "scoping_summary": "Scoped in Salesforce.",
+        })
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["target_mcp"] == "dd-governed-onboarding-mcp"
+    assert body["tool"] == "initialize_engagement"
+    args = body["arguments"]
+    assert args["org_id"] == "acme"
+    assert args["engagement_id"] == "006abc"
+    assert args["engagement_type"] == "pair_programming"
+    assert args["session_count"] == 35
+    assert args["source_opportunity_id"] == "006abc"
+    assert args["products_in_scope"] == ["infra", "apm", "logs", "rum", "synthetics_api"]
+    assert args["scoping_payload"]["estimate"] == estimate
+    assert body["next_tool"] == "batch_submit_intake"
+
+
+def test_governed_handoff_defaults_to_standard_observability_when_scope_empty(client):
+    estimate = {
+        "methodology": "governedPlatform",
+        "p1_days_low": 40,
+        "p1_days_high": 80,
+        "p1_days_mid": 60,
+        "pm_required": True,
+        "shape": "foundation",
+        "motion": "platform",
+        "service_motion": "Governed Platform",
+        "binding_constraints": [],
+        "flags": [],
+        "next_steps": [],
+    }
+    with patch("scoping_handlers.run_estimate", return_value=estimate):
+        resp = client.post("/scoping/governed_handoff", json={
+            "org_id": "acme",
+            "answers": {},
+        })
+
+    assert resp.status_code == 200
+    args = resp.json()["arguments"]
+    assert args["products_in_scope"] == ["infra", "apm", "logs"]
+    assert args["engagement_type"] == "governed_platform"
+    assert args["engagement_id"] == "acme-engagement"
+
+
+def test_governed_handoff_uses_opportunity_id_as_fallback_engagement_id(client):
+    estimate = {
+        "methodology": "onboarding",
+        "p1_days_low": 20,
+        "p1_days_high": 50,
+        "p1_days_mid": 35,
+        "pm_required": False,
+        "shape": "team-onboarding",
+        "motion": "onboarding",
+        "service_motion": "Guided Delivery",
+        "binding_constraints": [],
+        "flags": [],
+        "next_steps": [],
+    }
+    with patch("scoping_handlers.run_estimate", return_value=estimate):
+        resp = client.post("/scoping/governed_handoff", json={
+            "org_id": "acme",
+            "answers": {},
+            "sf_data": {"opportunityId": "006abc"},
+        })
+
+    assert resp.status_code == 200
+    assert resp.json()["arguments"]["engagement_id"] == "006abc"
+
+
+def test_governed_handoff_rejects_parallel_id_for_salesforce_opportunity(client):
+    estimate = {
+        "methodology": "onboarding",
+        "p1_days_low": 20,
+        "p1_days_high": 50,
+        "p1_days_mid": 35,
+        "pm_required": False,
+        "shape": "team-onboarding",
+        "motion": "onboarding",
+        "service_motion": "Guided Delivery",
+        "binding_constraints": [],
+        "flags": [],
+        "next_steps": [],
+    }
+    with patch("scoping_handlers.run_estimate", return_value=estimate):
+        resp = client.post("/scoping/governed_handoff", json={
+            "org_id": "acme",
+            "engagement_id": "eng-acme-rollout",
+            "answers": {},
+            "sf_data": {"opportunityId": "006abc"},
+        })
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["error"].startswith("engagement_id must match")
+    assert body["expected_engagement_id"] == "006abc"
+
+
 # --- /scoping/log_estimate ---
 
 def test_log_estimate_calls_append(client):
